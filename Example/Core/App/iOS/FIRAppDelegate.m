@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-@import FirebaseCommunity;
+//@import FirebaseCommunity;
 #import "FIRAppDelegate.h"
 
 @implementation FIRAppDelegate
 
 - (BOOL)application:(UIApplication *)application
     didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-  [FIRApp configure];
+ // [FIRApp configure];
   return YES;
 }
 

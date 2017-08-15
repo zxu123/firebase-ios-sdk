@@ -15,7 +15,7 @@ Firebase Development CocoaPod including experimental and community supported fea
   # Firebase pod
   s.source           = { :git => 'https://github.com/firebase/firebase-ios-sdk.git', :tag => s.version.to_s }
   s.social_media_url = 'https://twitter.com/Firebase'
-  s.ios.deployment_target = '8.0'
+  s.ios.deployment_target = '7.0'
   s.osx.deployment_target = '10.10'
   s.default_subspec  = 'Root'
   s.preserve_paths = 'README.md'

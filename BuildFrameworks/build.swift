@@ -124,7 +124,7 @@ func buildThin(framework: String, multiplatform: Bool, arch: String, multisdk: B
   if !multiplatform {
     schemeSuffix = ""
   } else if sdk.hasPrefix("mac") {
-    schemeSuffix = "-OSX"
+    schemeSuffix = "-macOS"
   } else if sdk.hasPrefix("iphone") {
     schemeSuffix = "-iOS"
   } else {
@@ -194,7 +194,7 @@ colorPrint(color:Colors.green, text:"Building \(frameworks)")
 
 let outputDir = tempDir()
 
-syncExec(command:"/usr/local/bin/pod", args:["update"])
+syncExec(command:"/usr/local/bin/pod", args:["update", "--no-repo-update"])
 
 for f in frameworks {
   let platforms = allFrameworks[f]!
