@@ -517,7 +517,11 @@ static id<FIRAuthBackendImplementation> gBackendImplementation;
 
 @end
 
-@implementation FIRAuthBackendRPCImplementation
+@implementation FIRAuthBackendRPCImplementation {
+  /** @var The project configuration response cached in memory.
+   */
+  FIRGetProjectConfigResponse *_getProjectConfigResponse;
+}
 
 - (instancetype)init {
   self = [super init];
@@ -553,11 +557,16 @@ static id<FIRAuthBackendImplementation> gBackendImplementation;
 
 - (void)getProjectConfig:(FIRGetProjectConfigRequest *)request
                 callback:(FIRGetProjectConfigResponseCallback)callback {
+  if (_getProjectConfigResponse) {
+    callback(_getProjectConfigResponse, nil);
+    return;
+  }
   FIRGetProjectConfigResponse *response = [[FIRGetProjectConfigResponse alloc] init];
   [self postWithRequest:request response:response callback:^(NSError *error) {
     if (error) {
       callback(nil, error);
     } else {
+      _getProjectConfigResponse = response;
       callback(response, nil);
     }
   }];

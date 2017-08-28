@@ -145,37 +145,51 @@ NSString *const kReCAPTCHAURLStringFormat =
       }
     };
 
-    [self reCAPTCHAURLWithCompletion:^(NSURL *_Nullable reCAPTCHAURL,
-                                    NSError *_Nullable error) {
+    [self verifyPhoneNumber:phoneNumber completion:^(NSString *_Nullable verificationID,
+                                                     NSError *_Nullable error) {
       if (error) {
+        NSError *underlyingError = error.userInfo[NSUnderlyingErrorKey];
+        if (error.code == FIRAuthErrorCodeMissingAppToken ||
+            underlyingError.code == FIRAuthErrorCodeInvalidAppCredential) {
+          [self reCAPTCHAURLWithCompletion:^(NSURL *_Nullable reCAPTCHAURL,
+                                             NSError *_Nullable error) {
+            if (error) {
+              callBackOnMainThread(nil, error);
+              return;
+            }
+            [_auth verifyAppWithURL:reCAPTCHAURL
+                         UIDelegate:UIDelegate
+                         completion:^(NSString *_Nullable reCAPTCHAToken,
+                                      NSError *_Nullable error) {
+              if (error) {
+                callBackOnMainThread(nil, error);
+                return;
+              }
+              FIRSendVerificationCodeRequest *request =
+                [[FIRSendVerificationCodeRequest alloc] initWithPhoneNumber:phoneNumber
+                                                              appCredential:nil
+                                                             reCAPTCHAToken:reCAPTCHAToken
+                                                       requestConfiguration:_auth.requestConfiguration];
+              [FIRAuthBackend sendVerificationCode:request
+                                          callback:^(FIRSendVerificationCodeResponse *_Nullable response,
+                                                     NSError *_Nullable error) {
+                if (error) {
+                  callBackOnMainThread(nil, error);
+                  return;
+                }
+                // Associate the phone number with the verification ID.
+                response.verificationID.fir_authPhoneNumber = phoneNumber;
+                callBackOnMainThread(response.verificationID, nil);
+              }];
+            }];
+          }];
+        }
         callBackOnMainThread(nil, error);
         return;
       }
-      [_auth verifyAppWithURL:reCAPTCHAURL
-                   UIDelegate:UIDelegate
-                   completion:^(NSString *_Nullable reCAPTCHAToken,
-                                NSError *_Nullable error) {
-        if (error) {
-          callBackOnMainThread(nil, error);
-          return;
-        }
-        FIRSendVerificationCodeRequest *request =
-          [[FIRSendVerificationCodeRequest alloc] initWithPhoneNumber:phoneNumber
-                                                        appCredential:nil
-                                                       reCAPTCHAToken:reCAPTCHAToken
-                                                 requestConfiguration:_auth.requestConfiguration];
-        [FIRAuthBackend sendVerificationCode:request
-                                    callback:^(FIRSendVerificationCodeResponse *_Nullable response,
-                                               NSError *_Nullable error) {
-          if (error) {
-            callBackOnMainThread(nil, error);
-            return;
-          }
-          // Associate the phone number with the verification ID.
-          response.verificationID.fir_authPhoneNumber = phoneNumber;
-          callBackOnMainThread(response.verificationID, nil);
-        }];
-      }];
+      // Associate the phone number with the verification ID.
+      verificationID.fir_authPhoneNumber = phoneNumber;
+      callBackOnMainThread(verificationID, nil);
     }];
   });
 }
