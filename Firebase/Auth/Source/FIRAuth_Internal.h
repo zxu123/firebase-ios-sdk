@@ -19,16 +19,27 @@
 #import "FIRAuth.h"
 
 @class FIRAuthRequestConfiguration;
+#import "FIRPhoneAuthProvider.h"
 
 #if TARGET_OS_IOS
 @class FIRAuthAPNSTokenManager;
 @class FIRAuthAppCredentialManager;
 @class FIRAuthNotificationManager;
+@protocol FIRAuthUIDelegate;
+
 #endif
 
 NS_ASSUME_NONNULL_BEGIN
 
 @interface FIRAuth ()
+
+/** @typedef FIRVerifyClientReCAPTCHACallback
+    @brief The callback invoked at the end of a client verification via reCAPTCHA flow.
+    @param reCAPTCHAToken reCAPTCHA token that proved the identity of the app.
+    @param error The error that occured while verifying the app, if any.
+ */
+typedef void (^FIRVerifyClientReCAPTCHACallback)(NSString *_Nullable reCAPTCHAToken,
+                                                 NSError *_Nullable error);
 
 /** @property requestConfiguration
     @brief The configuration object comprising of paramters needed to make a request to Firebase
@@ -51,6 +62,11 @@ NS_ASSUME_NONNULL_BEGIN
     @brief The manager for remote notifications used by phone number auth.
  */
 @property(nonatomic, strong, readonly) FIRAuthNotificationManager *notificationManager;
+
+/** @property presentingViewController
+    @brief The view controller used to present the
+ */
+@property(nonatomic, strong) UIViewController *presentingViewController;
 #endif
 
 /** @fn initWithAPIKey:appName:
@@ -127,6 +143,18 @@ NS_ASSUME_NONNULL_BEGIN
         to this method for phone number auth to work.
  */
 - (BOOL)canHandleURL:(nonnull NSURL *)url;
+
+/** @fn verifyAppWithURL:UIDelegate:completion:
+    @brief Attempts to verify the app via a mobile web context.
+    @param URL The URL hosting the web page to verify the app.
+    @param UIDelegate A view controller object used to present the SFSafariViewController or
+        WKWebview.
+    @param completion The completion block to be executed at the end of the flow.
+
+ */
+- (void)verifyAppWithURL:(NSURL *)URL
+              UIDelegate:(nullable id<FIRAuthUIDelegate>)UIDelegate
+              completion:(nullable FIRVerifyClientReCAPTCHACallback)completion;
 
 @end
 

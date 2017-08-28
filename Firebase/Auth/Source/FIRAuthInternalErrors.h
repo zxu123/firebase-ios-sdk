@@ -330,14 +330,25 @@ typedef NS_ENUM(NSInteger, FIRAuthInternalErrorCode) {
   FIRAuthInternalErrorCodeSessionExpired =
       FIRAuthPublicErrorCodeFlag | FIRAuthErrorCodeSessionExpired,
 
+  /** Indicates that the APNs device token could not be obtained.
+   */
   FIRAuthInternalErrorCodeMissingAppToken =
       FIRAuthPublicErrorCodeFlag | FIRAuthErrorCodeMissingAppToken,
 
+  /** Indicates that the app fails to forward remote notification to FIRAuth.
+   */
   FIRAuthInternalErrorCodeNotificationNotForwarded =
       FIRAuthPublicErrorCodeFlag | FIRAuthErrorCodeNotificationNotForwarded,
 
+  /** Indicates that the app could not be verified by Firebase during phone number authentication.
+   */
   FIRAuthInternalErrorCodeAppNotVerified =
       FIRAuthPublicErrorCodeFlag | FIRAuthErrorCodeAppNotVerified,
+
+  /** Indicates that the UI Delegate provided does not conform to the FIRAuthUIDelegate protocol.
+   */
+  FIRAuthInternalErrorCodeInvalidUIDelegate =
+      FIRAuthPublicErrorCodeFlag | FIRAuthErrorCodeInvalidUIDelegate,
 
   /** @var FIRAuthInternalErrorCodeRPCRequestEncodingError
       @brief Indicates an error encoding the RPC request.

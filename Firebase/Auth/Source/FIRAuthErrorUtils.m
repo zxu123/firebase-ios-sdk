@@ -345,6 +345,12 @@ static NSString *const kFIRAuthErrorMessageAppNotVerified = @"Firebase could not
 static NSString *const kFIRAuthErrorMessageCaptchaCheckFailed = @"The reCAPTCHA response token "
     "provided is either invalid, expired or already";
 
+/** @var kFIRAuthErrorMessageInvalidUIDelegate
+    @brief Message for @c FIRAuthErrorCodeInvalidUIDelegate error code.
+ */
+static NSString *const kFIRAuthErrorMessageInvalidUIDelegate = @"The UI Delegate provided does not "
+    "conform to th FIRAuthUIDelegate protocol.";
+
 /** @var kFIRAuthErrorMessageInternalError
     @brief Message for @c FIRAuthErrorCodeInternalError error code.
  */
@@ -455,6 +461,8 @@ static NSString *FIRAuthErrorDescription(FIRAuthErrorCode code) {
       return kFIRAuthErrorMessageAppNotVerified;
     case FIRAuthErrorCodeCaptchaCheckFailed:
       return kFIRAuthErrorMessageCaptchaCheckFailed;
+    case FIRAuthErrorCodeInvalidUIDelegate:
+      return kFIRAuthErrorMessageInvalidUIDelegate;
   }
 }
 
@@ -562,6 +570,8 @@ static NSString *const FIRAuthErrorCodeString(FIRAuthErrorCode code) {
       return @"ERROR_APP_NOT_VERIFIED";
     case FIRAuthErrorCodeCaptchaCheckFailed:
       return @"ERROR_CAPTCHA_CHECK_FAILED";
+    case FIRAuthErrorCodeInvalidUIDelegate:
+      return @"ERROR_INVALID_UI_DELEGATE";
   }
 }
 
@@ -871,6 +881,10 @@ static NSString *const FIRAuthErrorCodeString(FIRAuthErrorCode code) {
 
 + (NSError *)captchaCheckFailedErrorWithMessage:(nullable NSString *)message {
   return [self errorWithCode:FIRAuthInternalErrorCodeCaptchaCheckFailed message:message];
+}
+
++ (NSError *)invalidUIDelegateErrorWithMessage:(nullable NSString *)message {
+  return [self errorWithCode:FIRAuthInternalErrorCodeInvalidUIDelegate message:message];
 }
 
 + (NSError *)keychainErrorWithFunction:(NSString *)keychainFunction status:(OSStatus)status {

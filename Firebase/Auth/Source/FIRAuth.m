@@ -24,6 +24,7 @@
 #import "FIRLogger.h"
 #import "AuthProviders/EmailPassword/FIREmailPasswordAuthCredential.h"
 #import "FIRAdditionalUserInfo_Internal.h"
+#import "FIRAuth+UI.h"
 #import "FIRAuthCredential_Internal.h"
 #import "FIRAuthDataResult_Internal.h"
 #import "FIRAuthDispatcher.h"
@@ -260,6 +261,11 @@ static NSMutableDictionary *gKeychainServiceNameForAppName;
           UIApplicationDidEnterBackgroundNotification.
    */
   id<NSObject> _applicationDidEnterBackgroundObserver;
+
+  /** @var _verifyClientCallback
+    @brief The callback to be executed at the end of a verify client via reCAPTCHA flow.
+  */
+  FIRVerifyClientReCAPTCHACallback _verifyClientCallback;
 }
 
 + (void)load {
@@ -1042,6 +1048,16 @@ static NSMutableDictionary *gKeychainServiceNameForAppName;
                                callback:callback];
   }];
 }
+
+- (void)verifyAppWithURL:(NSURL *)URL
+              UIDelegate:(id<FIRAuthUIDelegate>)UIDelegate
+              completion:(FIRVerifyClientReCAPTCHACallback)completion {
+  _verifyClientCallback = completion;
+  NSError *error;
+  [self verifyAppWithURL:URL UIDelegate:UIDelegate error:&error];
+  NSLog(@"printing title: %@", _presentingViewController.title);
+}
+
 #endif
 
 - (void)notifyListenersOfAuthStateChangeWithUser:(FIRUser *)user token:(NSString *)token {

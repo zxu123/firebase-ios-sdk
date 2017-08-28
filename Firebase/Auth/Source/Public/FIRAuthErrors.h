@@ -276,6 +276,10 @@ typedef NS_ENUM(NSInteger, FIRAuthErrorCode) {
      */
     FIRAuthErrorCodeCaptchaCheckFailed = 17056,
 
+    /** Indicates that the UI Delegate provided does not conform to the FIRAuthUIDelegate protocol.
+     */
+    FIRAuthErrorCodeInvalidUIDelegate = 17057,
+
     /** Indicates an error occurred while attempting to access the keychain.
      */
     FIRAuthErrorCodeKeychainError = 17995,
