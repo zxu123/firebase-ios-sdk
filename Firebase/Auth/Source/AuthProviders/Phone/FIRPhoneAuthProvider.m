@@ -113,82 +113,71 @@ NSString *const kReCAPTCHAURLStringFormat =
         });
       }
     };
-
-    if (!phoneNumber.length) {
-      callBackOnMainThread(nil,
-                           [FIRAuthErrorUtils missingPhoneNumberErrorWithMessage:nil]);
-      return;
-    }
-    [_auth.notificationManager checkNotificationForwardingWithCallback:
-        ^(BOOL isNotificationBeingForwarded) {
-      if (!isNotificationBeingForwarded) {
-        callBackOnMainThread(nil, [FIRAuthErrorUtils notificationNotForwardedError]);
-        return;
-      }
-      [self verifyClientAndSendVerificationCodeToPhoneNumber:phoneNumber
-                                 retryOnInvalidAppCredential:YES
-                                                    callback:callBackOnMainThread];
-    }];
+    [self internalVerifyPhoneNumber:phoneNumber completion:callBackOnMainThread];
   });
 }
 
 - (void)verifyPhoneNumber:(NSString *)phoneNumber
                UIDelegate:(nullable id<FIRAuthUIDelegate>)UIDelegate
                completion:(nullable FIRVerificationResultCallback)completion {
-  [self verifyPhoneNumber:phoneNumber completion:^(NSString *_Nullable verificationID,
-                                                   NSError *_Nullable error) {
-    if (!error) {
+  dispatch_async(FIRAuthGlobalWorkQueue(), ^{
+    FIRVerificationResultCallback callBackOnMainThread = ^(NSString *_Nullable verificationID,
+                                                           NSError *_Nullable error) {
       if (completion) {
         dispatch_async(dispatch_get_main_queue(), ^{
-          // Associate the phone number with the verification ID.
-          verificationID.fir_authPhoneNumber = phoneNumber;
-          completion(verificationID, nil);
+          completion(verificationID, error);
         });
       }
-    }
-    NSError *underlyingError = error.userInfo[NSUnderlyingErrorKey];
-    if (error.code != FIRAuthErrorCodeMissingAppToken &&
-        underlyingError.code != FIRAuthErrorCodeInvalidAppCredential) {
-      completion(nil, error);
-      return;
-    }
-    [self reCAPTCHAURLWithCompletion:^(NSURL *_Nullable reCAPTCHAURL,
-                                       NSError *_Nullable error) {
-      if (error) {
+    };
+    [self internalVerifyPhoneNumber:phoneNumber completion:^(NSString *_Nullable verificationID,
+                                                           NSError *_Nullable error) {
+      if (!error) {
+        // Associate the phone number with the verification ID.
+        verificationID.fir_authPhoneNumber = phoneNumber;
+        callBackOnMainThread(verificationID, nil);
+        return;
+      }
+      NSError *underlyingError = error.userInfo[NSUnderlyingErrorKey];
+      if (error.code != FIRAuthErrorCodeMissingAppToken &&
+          underlyingError.code != FIRAuthErrorCodeInvalidAppCredential) {
         completion(nil, error);
         return;
       }
-      [_auth verifyAppWithURL:reCAPTCHAURL
-                   UIDelegate:UIDelegate
-                   completion:^(NSString *_Nullable reCAPTCHAToken,
-                                NSError *_Nullable error) {
+      [self reCAPTCHAURLWithCompletion:^(NSURL *_Nullable reCAPTCHAURL,
+                                         NSError *_Nullable error) {
         if (error) {
-          completion(nil, error);
+          callBackOnMainThread(nil, error);
           return;
         }
-        FIRSendVerificationCodeRequest *request =
-          [[FIRSendVerificationCodeRequest alloc] initWithPhoneNumber:phoneNumber
-                                                        appCredential:nil
-                                                       reCAPTCHAToken:reCAPTCHAToken
-                                                 requestConfiguration:_auth.requestConfiguration];
-        [FIRAuthBackend sendVerificationCode:request
-                                    callback:^(FIRSendVerificationCodeResponse *_Nullable response,
-                                               NSError *_Nullable error) {
+        [_auth verifyAppWithURL:reCAPTCHAURL
+                     UIDelegate:UIDelegate
+                     completion:^(NSString *_Nullable reCAPTCHAToken,
+                                  NSError *_Nullable error) {
           if (error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-              completion(nil, error);
-              return;
-            });
+            completion(nil, error);
+            return;
           }
-          // Associate the phone number with the verification ID.
-          response.verificationID.fir_authPhoneNumber = phoneNumber;
-          dispatch_async(dispatch_get_main_queue(), ^{
-            completion(response.verificationID, nil);
-          });
+          FIRSendVerificationCodeRequest *request =
+            [[FIRSendVerificationCodeRequest alloc] initWithPhoneNumber:phoneNumber
+                                                          appCredential:nil
+                                                         reCAPTCHAToken:reCAPTCHAToken
+                                                   requestConfiguration:_auth.requestConfiguration];
+          [FIRAuthBackend sendVerificationCode:request
+                                      callback:^(FIRSendVerificationCodeResponse
+                                                    *_Nullable response,
+                                                 NSError *_Nullable error) {
+            if (error) {
+              callBackOnMainThread(nil, error);
+              return;
+            }
+            // Associate the phone number with the verification ID.
+            response.verificationID.fir_authPhoneNumber = phoneNumber;
+            callBackOnMainThread(response.verificationID, nil);
+          }];
         }];
       }];
     }];
-  }];
+  });
 }
 
 - (FIRPhoneAuthCredential *)credentialWithVerificationID:(NSString *)verificationID
@@ -207,6 +196,39 @@ NSString *const kReCAPTCHAURLStringFormat =
 }
 
 #pragma mark - Internal Methods
+
+/** @fn internalVerifyPhoneNumber:completion:
+    @brief Starts the phone number authentication flow by sending a verifcation code to the
+        specified phone number.
+    @param phoneNumber The phone number to be verified.
+    @param completion The callback to be invoked when the verification flow is finished.
+ */
+
+- (void)internalVerifyPhoneNumber:(NSString *)phoneNumber
+                       completion:(nullable FIRVerificationResultCallback)completion {
+  if (!phoneNumber.length) {
+    completion(nil, [FIRAuthErrorUtils missingPhoneNumberErrorWithMessage:nil]);
+    return;
+  }
+  [_auth.notificationManager checkNotificationForwardingWithCallback:
+      ^(BOOL isNotificationBeingForwarded) {
+    if (!isNotificationBeingForwarded) {
+      completion(nil, [FIRAuthErrorUtils notificationNotForwardedError]);
+      return;
+    }
+    FIRVerificationResultCallback callBackOnMainThread = ^(NSString *_Nullable verificationID,
+                                                           NSError *_Nullable error) {
+      if (completion) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          completion(verificationID, error);
+        });
+      }
+    };
+    [self verifyClientAndSendVerificationCodeToPhoneNumber:phoneNumber
+                               retryOnInvalidAppCredential:YES
+                                                  callback:callBackOnMainThread];
+  }];
+}
 
 /** @fn verifyClientAndSendVerificationCodeToPhoneNumber:retryOnInvalidAppCredential:callback:
     @brief Starts the flow to verify the client via silent push notification.
