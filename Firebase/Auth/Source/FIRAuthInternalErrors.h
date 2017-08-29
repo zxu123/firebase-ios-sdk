@@ -345,11 +345,6 @@ typedef NS_ENUM(NSInteger, FIRAuthInternalErrorCode) {
   FIRAuthInternalErrorCodeAppNotVerified =
       FIRAuthPublicErrorCodeFlag | FIRAuthErrorCodeAppNotVerified,
 
-  /** Indicates that the UI Delegate provided does not conform to the FIRAuthUIDelegate protocol.
-   */
-  FIRAuthInternalErrorCodeInvalidUIDelegate =
-      FIRAuthPublicErrorCodeFlag | FIRAuthErrorCodeInvalidUIDelegate,
-
   /** @var FIRAuthInternalErrorCodeRPCRequestEncodingError
       @brief Indicates an error encoding the RPC request.
       @remarks This is typically due to some sort of unexpected input value.

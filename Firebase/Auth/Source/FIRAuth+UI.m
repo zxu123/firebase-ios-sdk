@@ -30,15 +30,23 @@ NS_ASSUME_NONNULL_BEGIN
                    error:(NSError **_Nullable)error {
   // If a UIDelegate is not provided.
   if (!UIDelegate) {
-    UIViewController *topController =
+    UIViewController *topViewController =
         [UIApplication sharedApplication].keyWindow.rootViewController;
-      [self presentWebContextWithController:topController URL:URL];
-      return YES;
-  }
-  // If an invalid UIDelegae is provided.
-  if (![self isValidUIDelegate:UIDelegate]) {
-    *error = [FIRAuthErrorUtils invalidUIDelegateErrorWithMessage:nil];
-    return NO;
+    while (true){
+     if (topViewController.presentedViewController) {
+         topViewController = topViewController.presentedViewController;
+     } else if ([topViewController isKindOfClass:[UINavigationController class]]) {
+         UINavigationController *nav = (UINavigationController *)topViewController;
+         topViewController = nav.topViewController;
+     } else if ([topViewController isKindOfClass:[UITabBarController class]]) {
+         UITabBarController *tab = (UITabBarController *)topViewController;
+         topViewController = tab.selectedViewController;
+     } else {
+         break;
+     }
+    }
+    [self presentWebContextWithController:topViewController URL:URL];
+    return YES;
   }
 
   // If a valid UIDelegate is provided.
@@ -59,17 +67,6 @@ NS_ASSUME_NONNULL_BEGIN
   [controller presentViewController:reCAPTCHAViewController animated:YES completion:nil];
   return;
 #endif
-}
-
-/** @fn isValidUIDelegate
-    @brief Determines whether the UI delegate is valid or not.
-    @param UIDelegate The UI delegate to validate.
-    @return Whether the UIDelegate is valid or not.
- */
-- (BOOL)isValidUIDelegate:(id <FIRAuthUIDelegate>)UIDelegate {
-  return ([UIDelegate isKindOfClass:[UIViewController class]] ||
-      ([UIDelegate respondsToSelector:@selector(presentViewController:animated:completion:)] &&
-      [UIDelegate respondsToSelector:@selector(dismissViewControllerAnimated:completion:)]));
 }
 
 @end
