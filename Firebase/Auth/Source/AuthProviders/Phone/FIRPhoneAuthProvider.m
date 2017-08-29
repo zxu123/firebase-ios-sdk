@@ -137,53 +137,57 @@ NSString *const kReCAPTCHAURLStringFormat =
                completion:(nullable FIRVerificationResultCallback)completion {
   [self verifyPhoneNumber:phoneNumber completion:^(NSString *_Nullable verificationID,
                                                    NSError *_Nullable error) {
-    if (error) {
-      NSError *underlyingError = error.userInfo[NSUnderlyingErrorKey];
-      if (error.code != FIRAuthErrorCodeMissingAppToken &&
-          underlyingError.code != FIRAuthErrorCodeInvalidAppCredential) {
+    if (!error) {
+      if (completion) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          // Associate the phone number with the verification ID.
+          verificationID.fir_authPhoneNumber = phoneNumber;
+          completion(verificationID, nil);
+        });
+      }
+    }
+    NSError *underlyingError = error.userInfo[NSUnderlyingErrorKey];
+    if (error.code != FIRAuthErrorCodeMissingAppToken &&
+        underlyingError.code != FIRAuthErrorCodeInvalidAppCredential) {
+      completion(nil, error);
+      return;
+    }
+    [self reCAPTCHAURLWithCompletion:^(NSURL *_Nullable reCAPTCHAURL,
+                                       NSError *_Nullable error) {
+      if (error) {
         completion(nil, error);
         return;
       }
-      [self reCAPTCHAURLWithCompletion:^(NSURL *_Nullable reCAPTCHAURL,
-                                         NSError *_Nullable error) {
+      [_auth verifyAppWithURL:reCAPTCHAURL
+                   UIDelegate:UIDelegate
+                   completion:^(NSString *_Nullable reCAPTCHAToken,
+                                NSError *_Nullable error) {
         if (error) {
           completion(nil, error);
           return;
         }
-        [_auth verifyAppWithURL:reCAPTCHAURL
-                     UIDelegate:UIDelegate
-                     completion:^(NSString *_Nullable reCAPTCHAToken,
-                                  NSError *_Nullable error) {
+        FIRSendVerificationCodeRequest *request =
+          [[FIRSendVerificationCodeRequest alloc] initWithPhoneNumber:phoneNumber
+                                                        appCredential:nil
+                                                       reCAPTCHAToken:reCAPTCHAToken
+                                                 requestConfiguration:_auth.requestConfiguration];
+        [FIRAuthBackend sendVerificationCode:request
+                                    callback:^(FIRSendVerificationCodeResponse *_Nullable response,
+                                               NSError *_Nullable error) {
           if (error) {
-            completion(nil, error);
-            return;
-          }
-          FIRSendVerificationCodeRequest *request =
-            [[FIRSendVerificationCodeRequest alloc] initWithPhoneNumber:phoneNumber
-                                                          appCredential:nil
-                                                         reCAPTCHAToken:reCAPTCHAToken
-                                                   requestConfiguration:_auth.requestConfiguration];
-          [FIRAuthBackend sendVerificationCode:request
-                                      callback:^(FIRSendVerificationCodeResponse *_Nullable response,
-                                                 NSError *_Nullable error) {
-            if (error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
               completion(nil, error);
               return;
-            }
-            // Associate the phone number with the verification ID.
-            response.verificationID.fir_authPhoneNumber = phoneNumber;
+            });
+          }
+          // Associate the phone number with the verification ID.
+          response.verificationID.fir_authPhoneNumber = phoneNumber;
+          dispatch_async(dispatch_get_main_queue(), ^{
             completion(response.verificationID, nil);
-          }];
+          });
         }];
       }];
-    }
-    if (completion) {
-      dispatch_async(dispatch_get_main_queue(), ^{
-        // Associate the phone number with the verification ID.
-        verificationID.fir_authPhoneNumber = phoneNumber;
-        completion(verificationID, nil);
-      });
-    }
+    }];
   }];
 }
 
