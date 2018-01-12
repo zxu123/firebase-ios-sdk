@@ -16,7 +16,7 @@
 
 #import "Firestore/Source/Local/FSTLocalStore.h"
 
-#import "FIRTimestamp.h"
+#import "Firestore/Source/Public/FIRTimestamp.h"
 #import "Firestore/Source/Core/FSTListenSequence.h"
 #import "Firestore/Source/Core/FSTQuery.h"
 #import "Firestore/Source/Core/FSTSnapshotVersion.h"
