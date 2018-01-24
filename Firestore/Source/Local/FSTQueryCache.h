@@ -100,9 +100,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (NSUInteger)count;
 
-- (void)addMutatedDocuments:(FSTDocumentKeySet *)keys
-           atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
-                      group:(FSTWriteGroup *)group;
+- (void)addPotentiallyOrphanedDocuments:(FSTDocumentKeySet *)keys
+                       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
+                                  group:(FSTWriteGroup *)group;
 
 /**
  * Looks up an FSTQueryData entry in the cache.
@@ -120,6 +120,7 @@ NS_ASSUME_NONNULL_BEGIN
 /** Removes the given document keys from the cached query results of the given target ID. */
 - (void)removeMatchingKeys:(FSTDocumentKeySet *)keys
                forTargetID:(FSTTargetID)targetID
+          atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
                      group:(FSTWriteGroup *)group;
 
 /** Removes all the keys in the query results of the given target ID. */

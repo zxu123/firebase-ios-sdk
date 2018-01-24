@@ -20,6 +20,7 @@
 #import "Firestore/Source/Core/FSTSnapshotVersion.h"
 #import "Firestore/Source/Local/FSTQueryData.h"
 #import "Firestore/Source/Local/FSTReferenceSet.h"
+#import "Firestore/Source/Model/FSTDocumentKey.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -29,7 +30,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, strong, readonly) NSMutableDictionary<FSTQuery *, FSTQueryData *> *queries;
 
 @property(nonatomic, strong, readonly)
-    NSMutableDictionary<FSTDocumentKey *, NSNumber *> *mutatedDocumentSequenceNumbers;
+    NSMutableDictionary<FSTDocumentKey *, NSNumber *> *orphanedDocumentSequenceNumbers;
 
 /** A ordered bidirectional mapping between documents and the remote target IDs. */
 @property(nonatomic, strong, readonly) FSTReferenceSet *references;
@@ -49,7 +50,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)init {
   if (self = [super init]) {
     _queries = [NSMutableDictionary dictionary];
-    _mutatedDocumentSequenceNumbers = [NSMutableDictionary dictionary];
+    _orphanedDocumentSequenceNumbers = [NSMutableDictionary dictionary];
     _references = [[FSTReferenceSet alloc] init];
     _lastRemoteSnapshotVersion = [FSTSnapshotVersion noVersion];
   }
@@ -113,7 +114,7 @@ NS_ASSUME_NONNULL_BEGIN
       enumerateKeysAndObjectsUsingBlock:^(FSTQuery *key, FSTQueryData *queryData, BOOL *stop) {
         block(queryData.sequenceNumber, stop);
       }];
-  [self.mutatedDocumentSequenceNumbers
+  [self.orphanedDocumentSequenceNumbers
       enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, NSNumber *sequenceNumber,
                                           BOOL *stop) {
         block([sequenceNumber longLongValue], stop);
@@ -139,13 +140,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 #pragma mark Reference tracking
 
-- (void)addMutatedDocuments:(FSTDocumentKeySet *)keys
-           atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
-                      group:(__unused FSTWriteGroup *)group {
+- (void)addPotentiallyOrphanedDocuments:(FSTDocumentKeySet *)keys
+                       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
+                                  group:(FSTWriteGroup *)group {
   NSNumber *seqNum = @(sequenceNumber);
-  for (FSTDocumentKey *key in [keys objectEnumerator]) {
-    self.mutatedDocumentSequenceNumbers[key] = seqNum;
-  }
+  [keys enumerateObjectsUsingBlock:^(FSTDocumentKey *key, BOOL *stop) {
+    self.orphanedDocumentSequenceNumbers[key] = seqNum;
+  }];
 }
 
 - (void)addMatchingKeys:(FSTDocumentKeySet *)keys
@@ -153,15 +154,17 @@ NS_ASSUME_NONNULL_BEGIN
                   group:(__unused FSTWriteGroup *)group {
   // We're adding docs to a target, we no longer care that they were mutated.
   for (FSTDocumentKey *key in [keys objectEnumerator]) {
-    [self.mutatedDocumentSequenceNumbers removeObjectForKey:key];
+    [self.orphanedDocumentSequenceNumbers removeObjectForKey:key];
   }
   [self.references addReferencesToKeys:keys forID:targetID];
 }
 
 - (void)removeMatchingKeys:(FSTDocumentKeySet *)keys
                forTargetID:(FSTTargetID)targetID
+          atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
                      group:(__unused FSTWriteGroup *)group {
   [self.references removeReferencesToKeys:keys forID:targetID];
+  [self addPotentiallyOrphanedDocuments:keys atSequenceNumber:sequenceNumber group:group];
 }
 
 - (void)removeMatchingKeysForTargetID:(FSTTargetID)targetID group:(__unused FSTWriteGroup *)group {

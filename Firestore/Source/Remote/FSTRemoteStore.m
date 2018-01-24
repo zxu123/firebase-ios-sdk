@@ -503,7 +503,8 @@ static const int kOnlineAttemptsBeforeFailure = 2;
       if (queryData) {
         _listenTargets[target] =
             [queryData queryDataByReplacingSnapshotVersion:change.snapshotVersion
-                                               resumeToken:resumeToken];
+                                               resumeToken:resumeToken
+                                            sequenceNumber:queryData.sequenceNumber];
       }
     }
   }];
