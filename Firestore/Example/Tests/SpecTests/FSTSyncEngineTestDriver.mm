@@ -38,9 +38,11 @@
 #import "Firestore/Example/Tests/SpecTests/FSTMockDatastore.h"
 
 #include "Firestore/core/src/firebase/firestore/auth/user.h"
+#include "Firestore/core/src/firebase/firestore/auth/empty_credentials_provider.h"
 
 using firebase::firestore::auth::HashUser;
 using firebase::firestore::auth::User;
+using firebase::firestore::auth::EmptyCredentialsProvider;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -84,6 +86,7 @@ NS_ASSUME_NONNULL_BEGIN
   std::unordered_map<User, NSMutableArray<FSTOutstandingWrite *> *, HashUser> _outstandingWrites;
 
   User _currentUser;
+  EmptyCredentialsProvider _credentials_provider;
 }
 
 - (instancetype)initWithPersistence:(id<FSTPersistence>)persistence
@@ -112,7 +115,7 @@ NS_ASSUME_NONNULL_BEGIN
     _localStore = [[FSTLocalStore alloc] initWithPersistence:persistence
                                             garbageCollector:garbageCollector
                                                  initialUser:initialUser];
-    _datastore = [FSTMockDatastore mockDatastoreWithWorkerDispatchQueue:dispatchQueue];
+    _datastore = [FSTMockDatastore mockDatastoreWithWorkerDispatchQueue:dispatchQueue credentials_provider:&_credentials_provider];
 
     _remoteStore = [FSTRemoteStore remoteStoreWithLocalStore:_localStore datastore:_datastore];
 

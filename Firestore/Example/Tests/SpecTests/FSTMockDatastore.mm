@@ -290,17 +290,14 @@ NS_ASSUME_NONNULL_BEGIN
 
 @implementation FSTMockDatastore
 
-+ (instancetype)mockDatastoreWithWorkerDispatchQueue:(FSTDispatchQueue *)workerDispatchQueue {
++ (instancetype)mockDatastoreWithWorkerDispatchQueue:(FSTDispatchQueue *)workerDispatchQueue credentials_provider:(CredentialsProvider*)credentials_provider {
   // This owns the DatabaseInfos since we do not have FirestoreClient instance to own them.
   static DatabaseInfo database_info{DatabaseId{"project", "database"}, "persistence", "host",
                                     false};
 
-  static std::list<EmptyCredentialsProvider> credentials_providers;
-  credentials_providers.emplace_back();
-
   return [[FSTMockDatastore alloc] initWithDatabaseInfo:&database_info
                                     workerDispatchQueue:workerDispatchQueue
-                                            credentials:&credentials_providers.back()];
+                                            credentials:credentials_provider];
 }
 
 #pragma mark - Overridden FSTDatastore methods.

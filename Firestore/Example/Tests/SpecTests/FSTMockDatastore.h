@@ -34,7 +34,7 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @property(nonatomic) int writeStreamRequestCount;
 
-+ (instancetype)mockDatastoreWithWorkerDispatchQueue:(FSTDispatchQueue *)workerDispatchQueue;
++ (instancetype)mockDatastoreWithWorkerDispatchQueue:(FSTDispatchQueue *)workerDispatchQueue credentials_provider:(firebase::firestore::auth::CredentialsProvider*)credentials_provider;
 
 #pragma mark - Watch Stream manipulation.
 
