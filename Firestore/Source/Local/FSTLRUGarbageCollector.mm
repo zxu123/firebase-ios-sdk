@@ -3,6 +3,7 @@
 #import <queue>
 
 #import "Firestore/Source/Local/FSTMutationQueue.h"
+#import "Firestore/Source/Local/FSTPersistence.h"
 #import "Firestore/Source/Local/FSTQueryCache.h"
 
 const FSTListenSequenceNumber kFSTListenSequenceNumberInvalid = -1;
@@ -51,6 +52,8 @@ class RollingSequenceNumberBuffer {
 @end
 
 @implementation FSTLRUGarbageCollector {
+  FSTLRUThreshold _threshold;
+  long _last_gc_time;
 }
 
 - (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache {
@@ -59,6 +62,24 @@ class RollingSequenceNumberBuffer {
     _queryCache = queryCache;
   }
   return self;
+}
+
+- (BOOL)shouldGC:(long)ms_since_start now:(long)now persistence:(id<FSTPersistence>)persistence {
+  if (ms_since_start < _threshold.min_ms_since_start) {
+    return NO;
+  }
+
+  long elapsed = now - _last_gc_time;
+  if (elapsed < _threshold.min_ms_between_attempts) {
+    return NO;
+  }
+
+  long total_storage_size = [persistence byteSize];
+  if (total_storage_size < _threshold.max_bytes_stored) {
+    return NO;
+  }
+
+  return YES;
 }
 
 - (NSUInteger)queryCountForPercentile:(NSUInteger)percentile {

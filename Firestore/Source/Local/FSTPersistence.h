@@ -99,6 +99,8 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (void)commitGroup:(FSTWriteGroup *)group;
 
+- (long)byteSize;
+
 @end
 
 NS_ASSUME_NONNULL_END

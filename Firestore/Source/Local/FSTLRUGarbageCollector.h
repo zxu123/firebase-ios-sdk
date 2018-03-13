@@ -9,6 +9,13 @@
 
 extern const FSTListenSequenceNumber kFSTListenSequenceNumberInvalid;
 
+struct FSTLRUThreshold {
+    long min_ms_since_start;
+    long max_bytes_stored;
+    long min_ms_between_attempts;
+
+};
+
 @interface FSTLRUGarbageCollector : NSObject
 
 - (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache;
