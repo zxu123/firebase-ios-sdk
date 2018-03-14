@@ -78,6 +78,9 @@ NS_ASSUME_NONNULL_BEGIN
                 throughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
                         mutationQueue:(id<FSTMutationQueue>)mutationQueue
                                 group:(FSTWriteGroup *)group;
+
+- (long)byteSize;
+
 @end
 
 NS_ASSUME_NONNULL_END

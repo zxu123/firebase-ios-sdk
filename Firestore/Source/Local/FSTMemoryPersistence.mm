@@ -107,6 +107,10 @@ NS_ASSUME_NONNULL_BEGIN
   FSTAssert(group.isEmpty, @"Memory persistence shouldn't use write groups: %@", group.action);
 }
 
+- (long)byteSize {
+  long bytes = [_queryCache byteSize] + [_remoteDocumentCache byteSize];
+}
+
 @end
 
 NS_ASSUME_NONNULL_END
