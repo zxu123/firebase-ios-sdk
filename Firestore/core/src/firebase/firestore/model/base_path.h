@@ -75,13 +75,6 @@ class BasePath {
   size_t size() const {
     return segments_.size();
   }
-  size_t byte_size() const {
-    size_t result = 0;
-    for (auto it = segments_.begin(); it != segments_.end(); it++) {
-      result += it->size();
-    }
-    return result;
-  }
   bool empty() const {
     return segments_.empty();
   }
