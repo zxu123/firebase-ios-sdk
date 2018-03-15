@@ -772,6 +772,12 @@ static const FSTTargetID kInvalidTargetID = 0;
   return result;
 }
 
++ (std::string)maxKey {
+  std::string result;
+  WriteTableName(&result, kRemoteDocumentsTable);
+  // TODO: write something that makes this work
+}
+
 + (std::string)keyPrefixWithResourcePath:(const ResourcePath &)path {
   std::string result;
   WriteTableName(&result, kRemoteDocumentsTable);

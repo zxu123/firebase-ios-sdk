@@ -120,6 +120,7 @@ size_t PathSize(const ResourcePath& path) {
     // multiply by 2 because the document contains the same key as well.
     result += 2 * PathSize(key.path);
   }];
+  return result;
 }
 
 @end

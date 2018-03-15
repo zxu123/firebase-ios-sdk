@@ -322,6 +322,8 @@ NS_ASSUME_NONNULL_BEGIN
  */
 + (std::string)keyPrefix;
 
++ (std::string)maxKey;
+
 /**
  * Creates a complete key that points to a specific document. The documentKey must have an even
  * number of path segments.
