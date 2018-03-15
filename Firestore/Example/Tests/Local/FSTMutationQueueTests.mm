@@ -16,9 +16,8 @@
 
 #import "Firestore/Example/Tests/Local/FSTMutationQueueTests.h"
 
-#import "Firestore/Source/Auth/FSTUser.h"
+#import <FirebaseFirestore/FIRTimestamp.h>
 #import "Firestore/Source/Core/FSTQuery.h"
-#import "Firestore/Source/Core/FSTTimestamp.h"
 #import "Firestore/Source/Local/FSTEagerGarbageCollector.h"
 #import "Firestore/Source/Local/FSTMutationQueue.h"
 #import "Firestore/Source/Local/FSTPersistence.h"
@@ -27,6 +26,10 @@
 #import "Firestore/Source/Model/FSTMutationBatch.h"
 
 #import "Firestore/Example/Tests/Util/FSTHelpers.h"
+
+#include "Firestore/core/src/firebase/firestore/auth/user.h"
+
+using firebase::firestore::auth::User;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -127,8 +130,7 @@ NS_ASSUME_NONNULL_BEGIN
 
   // Restart the queue so that nextBatchID will be reset.
   [self.mutationQueue shutdown];
-  self.mutationQueue =
-      [self.persistence mutationQueueForUser:[[FSTUser alloc] initWithUID:@"user"]];
+  self.mutationQueue = [self.persistence mutationQueueForUser:User("user")];
 
   FSTWriteGroup *group = [self.persistence startGroupWithAction:@"Start MutationQueue"];
   [self.mutationQueue startWithGroup:group];
@@ -215,6 +217,22 @@ NS_ASSUME_NONNULL_BEGIN
   XCTAssertNil(notFound);
 }
 
+- (void)testNextMutationBatchAfterBatchIDSkipsAcknowledgedBatches {
+  if ([self isTestBaseClass]) return;
+
+  NSMutableArray<FSTMutationBatch *> *batches = [self createBatches:3];
+  XCTAssertEqualObjects([self.mutationQueue nextMutationBatchAfterBatchID:kFSTBatchIDUnknown],
+                        batches[0]);
+
+  [self acknowledgeBatch:batches[0]];
+  XCTAssertEqualObjects([self.mutationQueue nextMutationBatchAfterBatchID:kFSTBatchIDUnknown],
+                        batches[1]);
+  XCTAssertEqualObjects([self.mutationQueue nextMutationBatchAfterBatchID:batches[0].batchID],
+                        batches[1]);
+  XCTAssertEqualObjects([self.mutationQueue nextMutationBatchAfterBatchID:batches[1].batchID],
+                        batches[2]);
+}
+
 - (void)testAllMutationBatchesThroughBatchID {
   if ([self isTestBaseClass]) return;
 
@@ -241,8 +259,8 @@ NS_ASSUME_NONNULL_BEGIN
                        @{ @"a" : @1 }),
     FSTTestSetMutation(@"foo/bar",
                        @{ @"a" : @1 }),
-    FSTTestPatchMutation(@"foo/bar",
-                         @{ @"b" : @1 }, nil),
+    FSTTestPatchMutation("foo/bar",
+                         @{ @"b" : @1 }, {}),
     FSTTestSetMutation(@"foo/bar/suffix/key",
                        @{ @"a" : @1 }),
     FSTTestSetMutation(@"foo/baz",
@@ -256,7 +274,7 @@ NS_ASSUME_NONNULL_BEGIN
   FSTWriteGroup *group = [self.persistence startGroupWithAction:@"New mutation batch"];
   for (FSTMutation *mutation in mutations) {
     FSTMutationBatch *batch =
-        [self.mutationQueue addMutationBatchWithWriteTime:[FSTTimestamp timestamp]
+        [self.mutationQueue addMutationBatchWithWriteTime:[FIRTimestamp timestamp]
                                                 mutations:@[ mutation ]
                                                     group:group];
     [batches addObject:batch];
@@ -278,8 +296,8 @@ NS_ASSUME_NONNULL_BEGIN
                        @{ @"a" : @1 }),
     FSTTestSetMutation(@"foo/bar",
                        @{ @"a" : @1 }),
-    FSTTestPatchMutation(@"foo/bar",
-                         @{ @"b" : @1 }, nil),
+    FSTTestPatchMutation("foo/bar",
+                         @{ @"b" : @1 }, {}),
     FSTTestSetMutation(@"foo/bar/suffix/key",
                        @{ @"a" : @1 }),
     FSTTestSetMutation(@"foo/baz",
@@ -293,7 +311,7 @@ NS_ASSUME_NONNULL_BEGIN
   FSTWriteGroup *group = [self.persistence startGroupWithAction:@"New mutation batch"];
   for (FSTMutation *mutation in mutations) {
     FSTMutationBatch *batch =
-        [self.mutationQueue addMutationBatchWithWriteTime:[FSTTimestamp timestamp]
+        [self.mutationQueue addMutationBatchWithWriteTime:[FIRTimestamp timestamp]
                                                 mutations:@[ mutation ]
                                                     group:group];
     [batches addObject:batch];
@@ -301,7 +319,7 @@ NS_ASSUME_NONNULL_BEGIN
   [self.persistence commitGroup:group];
 
   NSArray<FSTMutationBatch *> *expected = @[ batches[1], batches[2], batches[4] ];
-  FSTQuery *query = FSTTestQuery(@"foo");
+  FSTQuery *query = FSTTestQuery("foo");
   NSArray<FSTMutationBatch *> *matches =
       [self.mutationQueue allMutationBatchesAffectingQuery:query];
 
@@ -438,7 +456,7 @@ NS_ASSUME_NONNULL_BEGIN
 
   FSTWriteGroup *group = [self.persistence startGroupWithAction:@"New mutation batch"];
   FSTMutationBatch *batch =
-      [self.mutationQueue addMutationBatchWithWriteTime:[FSTTimestamp timestamp]
+      [self.mutationQueue addMutationBatchWithWriteTime:[FIRTimestamp timestamp]
                                               mutations:@[ mutation ]
                                                   group:group];
   [self.persistence commitGroup:group];

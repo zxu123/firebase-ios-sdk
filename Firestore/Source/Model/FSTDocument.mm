@@ -19,8 +19,13 @@
 #import "Firestore/Source/Core/FSTSnapshotVersion.h"
 #import "Firestore/Source/Model/FSTDocumentKey.h"
 #import "Firestore/Source/Model/FSTFieldValue.h"
-#import "Firestore/Source/Model/FSTPath.h"
 #import "Firestore/Source/Util/FSTAssert.h"
+
+#include "Firestore/core/src/firebase/firestore/model/field_path.h"
+#include "Firestore/core/src/firebase/firestore/util/string_apple.h"
+
+namespace util = firebase::firestore::util;
+using firebase::firestore::model::FieldPath;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -94,12 +99,12 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (NSString *)description {
-  return [NSString stringWithFormat:@"<FSTDocument: key:%@ version:%@ localMutations:%@ data:%@>",
-                                    self.key.path, self.version,
+  return [NSString stringWithFormat:@"<FSTDocument: key:%s version:%@ localMutations:%@ data:%@>",
+                                    self.key.path.CanonicalString().c_str(), self.version,
                                     self.localMutations ? @"YES" : @"NO", self.data];
 }
 
-- (nullable FSTFieldValue *)fieldForPath:(FSTFieldPath *)path {
+- (nullable FSTFieldValue *)fieldForPath:(const FieldPath &)path {
   return [_data valueForPath:path];
 }
 

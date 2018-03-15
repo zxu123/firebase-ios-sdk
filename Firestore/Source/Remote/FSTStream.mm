@@ -21,7 +21,6 @@
 
 #import "FIRFirestoreErrors.h"
 #import "Firestore/Source/API/FIRFirestore+Internal.h"
-#import "Firestore/Source/Auth/FSTCredentialsProvider.h"
 #import "Firestore/Source/Local/FSTQueryData.h"
 #import "Firestore/Source/Model/FSTMutation.h"
 #import "Firestore/Source/Remote/FSTBufferedWriter.h"
@@ -35,11 +34,15 @@
 
 #import "Firestore/Protos/objc/google/firestore/v1beta1/Firestore.pbrpc.h"
 
+#include "Firestore/core/src/firebase/firestore/auth/token.h"
 #include "Firestore/core/src/firebase/firestore/core/database_info.h"
 #include "Firestore/core/src/firebase/firestore/model/database_id.h"
+#include "Firestore/core/src/firebase/firestore/util/error_apple.h"
 #include "Firestore/core/src/firebase/firestore/util/string_apple.h"
 
 namespace util = firebase::firestore::util;
+using firebase::firestore::auth::CredentialsProvider;
+using firebase::firestore::auth::Token;
 using firebase::firestore::core::DatabaseInfo;
 using firebase::firestore::model::DatabaseId;
 
@@ -101,19 +104,20 @@ typedef NS_ENUM(NSInteger, FSTStreamState) {
  */
 - (instancetype)initWithDatabase:(const DatabaseInfo *)database
              workerDispatchQueue:(FSTDispatchQueue *)workerDispatchQueue
-                     credentials:(id<FSTCredentialsProvider>)credentials
+                     credentials:(CredentialsProvider *)credentials
                       serializer:(FSTSerializerBeta *)serializer NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithDatabase:(const DatabaseInfo *)database
              workerDispatchQueue:(FSTDispatchQueue *)workerDispatchQueue
-                     credentials:(id<FSTCredentialsProvider>)credentials
+                     credentials:(CredentialsProvider *)credentials
             responseMessageClass:(Class)responseMessageClass NS_UNAVAILABLE;
 
 @end
 
 @interface FSTStream ()
 
-@property(nonatomic, getter=isIdle) BOOL idle;
+@property(nonatomic, assign, readonly) FSTTimerID idleTimerID;
+@property(nonatomic, strong, nullable) FSTDelayedCallback *idleTimerCallback;
 @property(nonatomic, weak, readwrite, nullable) id delegate;
 
 @end
@@ -123,7 +127,7 @@ typedef NS_ENUM(NSInteger, FSTStreamState) {
 // Does not own this DatabaseInfo.
 @property(nonatomic, assign, readonly) const DatabaseInfo *databaseInfo;
 @property(nonatomic, strong, readonly) FSTDispatchQueue *workerDispatchQueue;
-@property(nonatomic, strong, readonly) id<FSTCredentialsProvider> credentials;
+@property(nonatomic, assign, readonly) CredentialsProvider *credentials;
 @property(nonatomic, unsafe_unretained, readonly) Class responseMessageClass;
 @property(nonatomic, strong, readonly) FSTExponentialBackoff *backoff;
 
@@ -149,7 +153,12 @@ typedef NS_ENUM(NSInteger, FSTStreamState) {
 
 #pragma mark - FSTCallbackFilter
 
-/** Filter class that allows disabling of GRPC callbacks. */
+/**
+ * Implements callbacks from gRPC via the GRXWriteable protocol. This is separate from the main
+ * FSTStream to allow the stream to be stopped externally (either by the user or via idle timer)
+ * and be able to completely prevent any subsequent events from gRPC from calling back into the
+ * FSTSTream.
+ */
 @interface FSTCallbackFilter : NSObject <GRXWriteable>
 
 - (instancetype)initWithStream:(FSTStream *)stream NS_DESIGNATED_INITIALIZER;
@@ -203,18 +212,22 @@ static const NSTimeInterval kIdleTimeout = 60.0;
 
 - (instancetype)initWithDatabase:(const DatabaseInfo *)database
              workerDispatchQueue:(FSTDispatchQueue *)workerDispatchQueue
-                     credentials:(id<FSTCredentialsProvider>)credentials
+               connectionTimerID:(FSTTimerID)connectionTimerID
+                     idleTimerID:(FSTTimerID)idleTimerID
+                     credentials:(CredentialsProvider *)credentials
             responseMessageClass:(Class)responseMessageClass {
   if (self = [super init]) {
     _databaseInfo = database;
     _workerDispatchQueue = workerDispatchQueue;
+    _idleTimerID = idleTimerID;
     _credentials = credentials;
     _responseMessageClass = responseMessageClass;
 
-    _backoff = [FSTExponentialBackoff exponentialBackoffWithDispatchQueue:workerDispatchQueue
-                                                             initialDelay:kBackoffInitialDelay
-                                                            backoffFactor:kBackoffFactor
-                                                                 maxDelay:kBackoffMaxDelay];
+    _backoff = [[FSTExponentialBackoff alloc] initWithDispatchQueue:workerDispatchQueue
+                                                            timerID:connectionTimerID
+                                                       initialDelay:kBackoffInitialDelay
+                                                      backoffFactor:kBackoffFactor
+                                                           maxDelay:kBackoffMaxDelay];
     _state = FSTStreamStateInitial;
   }
   return self;
@@ -251,24 +264,24 @@ static const NSTimeInterval kIdleTimeout = 60.0;
   FSTAssert(_delegate == nil, @"Delegate must be nil");
   _delegate = delegate;
 
-  [self.credentials
-      getTokenForcingRefresh:NO
-                  completion:^(FSTGetTokenResult *_Nullable result, NSError *_Nullable error) {
-                    error = [FSTDatastore firestoreErrorForError:error];
-                    [self.workerDispatchQueue dispatchAsyncAllowingSameQueue:^{
-                      [self resumeStartWithToken:result error:error];
-                    }];
-                  }];
+  _credentials->GetToken(
+      /*force_refresh=*/false,
+      [self](Token result, const int64_t error_code, const absl::string_view error_msg) {
+        NSError *error = util::WrapNSError(error_code, error_msg);
+        [self.workerDispatchQueue dispatchAsyncAllowingSameQueue:^{
+          [self resumeStartWithToken:result error:error];
+        }];
+      });
 }
 
 /** Add an access token to our RPC, after obtaining one from the credentials provider. */
-- (void)resumeStartWithToken:(FSTGetTokenResult *)token error:(NSError *)error {
+- (void)resumeStartWithToken:(const Token &)token error:(NSError *)error {
+  [self.workerDispatchQueue verifyIsCurrentQueue];
+
   if (self.state == FSTStreamStateStopped) {
     // Streams can be stopped while waiting for authorization.
     return;
   }
-
-  [self.workerDispatchQueue verifyIsCurrentQueue];
   FSTAssert(self.state == FSTStreamStateAuth, @"State should still be auth (was %ld)",
             (long)self.state);
 
@@ -282,9 +295,12 @@ static const NSTimeInterval kIdleTimeout = 60.0;
 
   self.requestsWriter = [[FSTBufferedWriter alloc] init];
   _rpc = [self createRPCWithRequestsWriter:self.requestsWriter];
-  [FSTDatastore prepareHeadersForRPC:_rpc
-                          databaseID:&self.databaseInfo->database_id()
-                               token:token.token];
+  [_rpc setResponseDispatchQueue:self.workerDispatchQueue.queue];
+
+  [FSTDatastore
+      prepareHeadersForRPC:_rpc
+                databaseID:&self.databaseInfo->database_id()
+                     token:(token.user().is_authenticated() ? token.token() : absl::string_view())];
   FSTAssert(_callbackFilter == nil, @"GRX Filter must be nil");
   _callbackFilter = [[FSTCallbackFilter alloc] initWithStream:self];
   [_rpc startWithWriteable:_callbackFilter];
@@ -363,7 +379,10 @@ static const NSTimeInterval kIdleTimeout = 60.0;
     [self.backoff resetToMax];
   }
 
-  [self tearDown];
+  if (finalState != FSTStreamStateError) {
+    FSTLog(@"%@ %p Performing stream teardown", [self class], (__bridge void *)self);
+    [self tearDown];
+  }
 
   if (self.requestsWriter) {
     // Clean up the underlying RPC. If this close: is in response to an error, don't attempt to
@@ -394,8 +413,9 @@ static const NSTimeInterval kIdleTimeout = 60.0;
     [self notifyStreamInterruptedWithError:error];
   }
 
-  // Clear the delegates to avoid any possible bleed through of events from GRPC.
-  _delegate = nil;
+  // PORTING NOTE: notifyStreamInterruptedWithError may have restarted the stream with a new
+  // delegate so we do /not/ want to clear the delegate here. And since we've already suppressed
+  // callbacks via our callbackFilter, there is no worry about bleed through of events from GRPC.
 }
 
 - (void)stop {
@@ -418,7 +438,7 @@ static const NSTimeInterval kIdleTimeout = 60.0;
 /** Called by the idle timer when the stream should close due to inactivity. */
 - (void)handleIdleCloseTimer {
   [self.workerDispatchQueue verifyIsCurrentQueue];
-  if (self.state == FSTStreamStateOpen && [self isIdle]) {
+  if ([self isOpen]) {
     // When timing out an idle stream there's no reason to force the stream into backoff when
     // it restarts so set the stream state to Initial instead of Error.
     [self closeWithFinalState:FSTStreamStateInitial error:nil];
@@ -427,18 +447,23 @@ static const NSTimeInterval kIdleTimeout = 60.0;
 
 - (void)markIdle {
   [self.workerDispatchQueue verifyIsCurrentQueue];
-  if (self.state == FSTStreamStateOpen) {
-    self.idle = YES;
-    [self.workerDispatchQueue dispatchAfterDelay:kIdleTimeout
-                                           block:^() {
-                                             [self handleIdleCloseTimer];
-                                           }];
+  // Starts the idle timer if we are in state 'Open' and are not yet already running a timer (in
+  // which case the previous idle timeout still applies).
+  if ([self isOpen] && !self.idleTimerCallback) {
+    self.idleTimerCallback = [self.workerDispatchQueue dispatchAfterDelay:kIdleTimeout
+                                                                  timerID:self.idleTimerID
+                                                                    block:^() {
+                                                                      [self handleIdleCloseTimer];
+                                                                    }];
   }
 }
 
 - (void)cancelIdleCheck {
   [self.workerDispatchQueue verifyIsCurrentQueue];
-  self.idle = NO;
+  if (self.idleTimerCallback) {
+    [self.idleTimerCallback cancel];
+    self.idleTimerCallback = nil;
+  }
 }
 
 /**
@@ -519,11 +544,7 @@ static const NSTimeInterval kIdleTimeout = 60.0;
  */
 - (void)handleStreamClose:(nullable NSError *)error {
   FSTLog(@"%@ %p close: %@", NSStringFromClass([self class]), (__bridge void *)self, error);
-
-  if (![self isStarted]) {  // The stream could have already been closed by the idle close timer.
-    FSTLog(@"%@ Ignoring server close for already closed stream.", NSStringFromClass([self class]));
-    return;
-  }
+  FSTAssert([self isStarted], @"handleStreamClose: called for non-started stream.");
 
   // In theory the stream could close cleanly, however, in our current model we never expect this
   // to happen because if we stop a stream ourselves, this callback will never be called. To
@@ -536,19 +557,15 @@ static const NSTimeInterval kIdleTimeout = 60.0;
 // The GRXWriteable implementation defines the receive side of the RPC stream.
 
 /**
- * Called by GRPC when it publishes a value. It is called from GRPC's own queue so we immediately
- * redispatch back onto our own worker queue.
+ * Called by GRPC when it publishes a value.
+ *
+ * GRPC must be configured to use our worker queue by calling
+ * `[call setResponseDispatchQueue:self.workerDispatchQueue.queue]` on the GRPCCall before starting
+ * the RPC.
  */
-- (void)writeValue:(id)value __used {
-  // TODO(mcg): remove the double-dispatch once GRPCCall at head is released.
-  // Once released we can set the responseDispatchQueue property on the GRPCCall and then this
-  // method can call handleStreamMessage directly.
-  FSTWeakify(self);
-  [self.workerDispatchQueue dispatchAsync:^{
-    FSTStrongify(self);
-    if (![self isStarted]) {
-      FSTLog(@"%@ Ignoring stream message from inactive stream.", NSStringFromClass([self class]));
-    }
+- (void)writeValue:(id)value {
+  [self.workerDispatchQueue enterCheckedOperation:^{
+    FSTAssert([self isStarted], @"writeValue: called for stopped stream.");
 
     if (!self.messageReceived) {
       self.messageReceived = YES;
@@ -563,7 +580,7 @@ static const NSTimeInterval kIdleTimeout = 60.0;
     if (proto) {
       [self handleStreamMessage:proto];
     } else {
-      [_rpc finishWithError:error];
+      [self.rpc finishWithError:error];
     }
   }];
 }
@@ -572,17 +589,18 @@ static const NSTimeInterval kIdleTimeout = 60.0;
  * Called by GRPC when it closed the stream with an error representing the final state of the
  * stream.
  *
- * Do not call directly, since it dispatches via the worker queue. Call handleStreamClose to
- * directly inform stream-specific logic, or call stop to tear down the stream.
+ * GRPC must be configured to use our worker queue by calling
+ * `[call setResponseDispatchQueue:self.workerDispatchQueue.queue]` on the GRPCCall before starting
+ * the RPC.
+ *
+ * Do not call directly. Call handleStreamClose to directly inform stream-specific logic, or call
+ * stop to tear down the stream.
  */
 - (void)writesFinishedWithError:(nullable NSError *)error __used {
   error = [FSTDatastore firestoreErrorForError:error];
-  FSTWeakify(self);
-  [self.workerDispatchQueue dispatchAsync:^{
-    FSTStrongify(self);
-    if (!self || self.state == FSTStreamStateStopped) {
-      return;
-    }
+  [self.workerDispatchQueue enterCheckedOperation:^{
+    FSTAssert([self isStarted], @"writesFinishedWithError: called for stopped stream.");
+
     [self handleStreamClose:error];
   }];
 }
@@ -601,10 +619,12 @@ static const NSTimeInterval kIdleTimeout = 60.0;
 
 - (instancetype)initWithDatabase:(const DatabaseInfo *)database
              workerDispatchQueue:(FSTDispatchQueue *)workerDispatchQueue
-                     credentials:(id<FSTCredentialsProvider>)credentials
+                     credentials:(CredentialsProvider *)credentials
                       serializer:(FSTSerializerBeta *)serializer {
   self = [super initWithDatabase:database
              workerDispatchQueue:workerDispatchQueue
+               connectionTimerID:FSTTimerIDListenStreamConnectionBackoff
+                     idleTimerID:FSTTimerIDListenStreamIdle
                      credentials:credentials
             responseMessageClass:[GCFSListenResponse class]];
   if (self) {
@@ -614,7 +634,7 @@ static const NSTimeInterval kIdleTimeout = 60.0;
 }
 
 - (GRPCCall *)createRPCWithRequestsWriter:(GRXWriter *)requestsWriter {
-  return [[GRPCCall alloc] initWithHost:util::WrapNSStringNoCopy(self.databaseInfo->host())
+  return [[GRPCCall alloc] initWithHost:util::WrapNSString(self.databaseInfo->host())
                                    path:@"/google.firestore.v1beta1.Firestore/Listen"
                          requestsWriter:requestsWriter];
 }
@@ -684,10 +704,12 @@ static const NSTimeInterval kIdleTimeout = 60.0;
 
 - (instancetype)initWithDatabase:(const DatabaseInfo *)database
              workerDispatchQueue:(FSTDispatchQueue *)workerDispatchQueue
-                     credentials:(id<FSTCredentialsProvider>)credentials
+                     credentials:(CredentialsProvider *)credentials
                       serializer:(FSTSerializerBeta *)serializer {
   self = [super initWithDatabase:database
              workerDispatchQueue:workerDispatchQueue
+               connectionTimerID:FSTTimerIDWriteStreamConnectionBackoff
+                     idleTimerID:FSTTimerIDWriteStreamIdle
                      credentials:credentials
             responseMessageClass:[GCFSWriteResponse class]];
   if (self) {
@@ -697,7 +719,7 @@ static const NSTimeInterval kIdleTimeout = 60.0;
 }
 
 - (GRPCCall *)createRPCWithRequestsWriter:(GRXWriter *)requestsWriter {
-  return [[GRPCCall alloc] initWithHost:util::WrapNSStringNoCopy(self.databaseInfo->host())
+  return [[GRPCCall alloc] initWithHost:util::WrapNSString(self.databaseInfo->host())
                                    path:@"/google.firestore.v1beta1.Firestore/Write"
                          requestsWriter:requestsWriter];
 }

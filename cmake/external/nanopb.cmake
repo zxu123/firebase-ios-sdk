@@ -11,13 +11,6 @@
 # limitations under the License.
 
 include(ExternalProject)
-include(ExternalProjectFlags)
-
-ExternalProject_GitSource(
-  NANOPB_GIT
-  GIT_REPOSITORY "https://github.com/nanopb/nanopb.git"
-  GIT_TAG "0.3.8"
-)
 
 set(
   NANOPB_PROTOC_BIN
@@ -29,7 +22,9 @@ ExternalProject_Add(
   DEPENDS
     protobuf
 
-  ${NANOPB_GIT}
+  DOWNLOAD_DIR ${PROJECT_BINARY_DIR}/downloads
+  URL https://github.com/nanopb/nanopb/archive/nanopb-0.3.8.tar.gz
+  URL_HASH SHA256=f192c7c7cc036be36babc303b7d2315d4f62e2fe4be28c172cfed4cfa0ed5f22
 
   BUILD_IN_SOURCE ON
 
@@ -55,9 +50,14 @@ ExternalProject_Add(
   # nanopb relies on $PATH for the location of protoc. cmake makes it difficult
   # to adjust the path, so we'll just patch the build files with the exact
   # location of protoc.
+  #
+  # NB: cmake sometimes runs the patch command multiple times in the same src
+  # dir, so we need to make sure this is idempotent. (eg 'make && make clean &&
+  # make')
   PATCH_COMMAND
-    perl -i -pe s,protoc,${NANOPB_PROTOC_BIN},g
-        ./CMakeLists.txt ./generator/proto/Makefile
+    grep ${NANOPB_PROTOC_BIN} ./generator/proto/Makefile
+      || perl -i -pe s,protoc,${NANOPB_PROTOC_BIN},g
+           ./CMakeLists.txt ./generator/proto/Makefile
 
   UPDATE_COMMAND ""
   INSTALL_COMMAND ""

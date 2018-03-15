@@ -16,27 +16,29 @@
 
 #import <XCTest/XCTest.h>
 
+#import <GRPCClient/GRPCCall.h>
+
 #import <FirebaseFirestore/FIRFirestoreSettings.h>
 
 #import "Firestore/Example/Tests/Util/FSTHelpers.h"
 #import "Firestore/Example/Tests/Util/FSTIntegrationTestCase.h"
-#import "Firestore/Example/Tests/Util/FSTTestDispatchQueue.h"
-#import "Firestore/Source/Auth/FSTEmptyCredentialsProvider.h"
 #import "Firestore/Source/Remote/FSTDatastore.h"
 #import "Firestore/Source/Remote/FSTStream.h"
 #import "Firestore/Source/Util/FSTAssert.h"
 
+#include "Firestore/core/src/firebase/firestore/auth/empty_credentials_provider.h"
 #include "Firestore/core/src/firebase/firestore/core/database_info.h"
 #include "Firestore/core/src/firebase/firestore/model/database_id.h"
 #include "Firestore/core/src/firebase/firestore/util/string_apple.h"
 
 namespace util = firebase::firestore::util;
+using firebase::firestore::auth::EmptyCredentialsProvider;
 using firebase::firestore::core::DatabaseInfo;
 using firebase::firestore::model::DatabaseId;
 
 /** Exposes otherwise private methods for testing. */
 @interface FSTStream (Testing)
-- (void)writesFinishedWithError:(NSError *_Nullable)error;
+@property(nonatomic, strong, readwrite) id<GRXWriteable> callbackFilter;
 @end
 
 /**
@@ -133,9 +135,9 @@ using firebase::firestore::model::DatabaseId;
 
 @implementation FSTStreamTests {
   dispatch_queue_t _testQueue;
-  FSTTestDispatchQueue *_workerDispatchQueue;
+  FSTDispatchQueue *_workerDispatchQueue;
   DatabaseInfo _databaseInfo;
-  FSTEmptyCredentialsProvider *_credentials;
+  EmptyCredentialsProvider _credentials;
   FSTStreamStatusDelegate *_delegate;
 
   /** Single mutation to send to the write stream. */
@@ -147,14 +149,13 @@ using firebase::firestore::model::DatabaseId;
 
   FIRFirestoreSettings *settings = [FSTIntegrationTestCase settings];
   DatabaseId database_id(util::MakeStringView([FSTIntegrationTestCase projectID]),
-                         DatabaseId::kDefaultDatabaseId);
+                         DatabaseId::kDefault);
 
   _testQueue = dispatch_queue_create("FSTStreamTestWorkerQueue", DISPATCH_QUEUE_SERIAL);
-  _workerDispatchQueue = [[FSTTestDispatchQueue alloc] initWithQueue:_testQueue];
+  _workerDispatchQueue = [[FSTDispatchQueue alloc] initWithQueue:_testQueue];
 
   _databaseInfo = DatabaseInfo(database_id, "test-key", util::MakeStringView(settings.host),
                                settings.sslEnabled);
-  _credentials = [[FSTEmptyCredentialsProvider alloc] init];
 
   _delegate = [[FSTStreamStatusDelegate alloc] initWithTestCase:self queue:_workerDispatchQueue];
 
@@ -164,14 +165,14 @@ using firebase::firestore::model::DatabaseId;
 - (FSTWriteStream *)setUpWriteStream {
   FSTDatastore *datastore = [[FSTDatastore alloc] initWithDatabaseInfo:&_databaseInfo
                                                    workerDispatchQueue:_workerDispatchQueue
-                                                           credentials:_credentials];
+                                                           credentials:&_credentials];
   return [datastore createWriteStream];
 }
 
 - (FSTWatchStream *)setUpWatchStream {
   FSTDatastore *datastore = [[FSTDatastore alloc] initWithDatabaseInfo:&_databaseInfo
                                                    workerDispatchQueue:_workerDispatchQueue
-                                                           credentials:_credentials];
+                                                           credentials:&_credentials];
   return [datastore createWatchStream];
 }
 
@@ -203,7 +204,9 @@ using firebase::firestore::model::DatabaseId;
   }];
 
   // Simulate a final callback from GRPC
-  [watchStream writesFinishedWithError:nil];
+  [_workerDispatchQueue dispatchAsync:^{
+    [watchStream.callbackFilter writesFinishedWithError:nil];
+  }];
 
   [self verifyDelegateObservedStates:@[ @"watchStreamDidOpen" ]];
 }
@@ -225,7 +228,9 @@ using firebase::firestore::model::DatabaseId;
   }];
 
   // Simulate a final callback from GRPC
-  [writeStream writesFinishedWithError:nil];
+  [_workerDispatchQueue dispatchAsync:^{
+    [writeStream.callbackFilter writesFinishedWithError:nil];
+  }];
 
   [self verifyDelegateObservedStates:@[ @"writeStreamDidOpen" ]];
 }
@@ -238,9 +243,9 @@ using firebase::firestore::model::DatabaseId;
   }];
 
   // Writing before the handshake should throw
-  dispatch_sync(_testQueue, ^{
+  [_workerDispatchQueue dispatchSync:^{
     XCTAssertThrows([writeStream writeMutations:_mutations]);
-  });
+  }];
 
   [_delegate awaitNotificationFromBlock:^{
     [writeStream writeHandshake];
@@ -272,13 +277,17 @@ using firebase::firestore::model::DatabaseId;
     [writeStream writeHandshake];
   }];
 
-  [_delegate awaitNotificationFromBlock:^{
+  [_workerDispatchQueue dispatchAsync:^{
     [writeStream markIdle];
+    XCTAssertTrue(
+        [_workerDispatchQueue containsDelayedCallbackWithTimerID:FSTTimerIDWriteStreamIdle]);
   }];
 
-  dispatch_sync(_testQueue, ^{
+  [_workerDispatchQueue runDelayedCallbacksUntil:FSTTimerIDWriteStreamIdle];
+
+  [_workerDispatchQueue dispatchSync:^{
     XCTAssertFalse([writeStream isOpen]);
-  });
+  }];
 
   [self verifyDelegateObservedStates:@[
     @"writeStreamDidOpen", @"writeStreamDidCompleteHandshake", @"writeStreamWasInterrupted"
@@ -299,12 +308,16 @@ using firebase::firestore::model::DatabaseId;
   // Mark the stream idle, but immediately cancel the idle timer by issuing another write.
   [_delegate awaitNotificationFromBlock:^{
     [writeStream markIdle];
+    XCTAssertTrue(
+        [_workerDispatchQueue containsDelayedCallbackWithTimerID:FSTTimerIDWriteStreamIdle]);
     [writeStream writeMutations:_mutations];
+    XCTAssertFalse(
+        [_workerDispatchQueue containsDelayedCallbackWithTimerID:FSTTimerIDWriteStreamIdle]);
   }];
 
-  dispatch_sync(_testQueue, ^{
+  [_workerDispatchQueue dispatchSync:^{
     XCTAssertTrue([writeStream isOpen]);
-  });
+  }];
 
   [self verifyDelegateObservedStates:@[
     @"writeStreamDidOpen", @"writeStreamDidCompleteHandshake",

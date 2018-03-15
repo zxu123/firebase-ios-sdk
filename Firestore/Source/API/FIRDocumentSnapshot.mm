@@ -24,7 +24,6 @@
 #import "Firestore/Source/Model/FSTDocument.h"
 #import "Firestore/Source/Model/FSTDocumentKey.h"
 #import "Firestore/Source/Model/FSTFieldValue.h"
-#import "Firestore/Source/Model/FSTPath.h"
 #import "Firestore/Source/Util/FSTAssert.h"
 #import "Firestore/Source/Util/FSTUsageValidation.h"
 
@@ -122,7 +121,7 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (NSString *)documentID {
-  return [self.internalKey.path lastSegment];
+  return util::WrapNSString(self.internalKey.path.last_segment());
 }
 
 - (FIRSnapshotMetadata *)metadata {
@@ -184,12 +183,11 @@ NS_ASSUME_NONNULL_BEGIN
       // TODO(b/32073923): Log this as a proper warning.
       NSLog(
           @"WARNING: Document %@ contains a document reference within a different database "
-           "(%@/%@) which is not supported. It will be treated as a reference within the "
-           "current database (%@/%@) instead.",
-          self.reference.path, util::WrapNSStringNoCopy(refDatabase->project_id()),
-          util::WrapNSStringNoCopy(refDatabase->database_id()),
-          util::WrapNSStringNoCopy(database->project_id()),
-          util::WrapNSStringNoCopy(database->database_id()));
+           "(%s/%s) which is not supported. It will be treated as a reference within the "
+           "current database (%s/%s) instead.",
+          self.reference.path, refDatabase->project_id().c_str(),
+          refDatabase->database_id().c_str(), database->project_id().c_str(),
+          database->database_id().c_str());
     }
     return [FIRDocumentReference referenceWithKey:[ref valueWithOptions:options]
                                         firestore:self.firestore];

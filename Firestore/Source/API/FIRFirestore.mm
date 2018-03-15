@@ -16,7 +16,11 @@
 
 #import "FIRFirestore.h"
 
+#include <memory>
+#include <utility>
+
 #import <FirebaseCore/FIRApp.h>
+#import <FirebaseCore/FIRAppInternal.h>
 #import <FirebaseCore/FIRLogger.h>
 #import <FirebaseCore/FIROptions.h>
 
@@ -28,22 +32,27 @@
 #import "Firestore/Source/API/FIRWriteBatch+Internal.h"
 #import "Firestore/Source/API/FSTUserDataConverter.h"
 
-#import "Firestore/Source/Auth/FSTCredentialsProvider.h"
 #import "Firestore/Source/Core/FSTFirestoreClient.h"
 #import "Firestore/Source/Model/FSTDocumentKey.h"
-#import "Firestore/Source/Model/FSTPath.h"
 #import "Firestore/Source/Util/FSTAssert.h"
 #import "Firestore/Source/Util/FSTDispatchQueue.h"
 #import "Firestore/Source/Util/FSTLogger.h"
 #import "Firestore/Source/Util/FSTUsageValidation.h"
 
+#include "Firestore/core/src/firebase/firestore/auth/credentials_provider.h"
+#include "Firestore/core/src/firebase/firestore/auth/firebase_credentials_provider_apple.h"
 #include "Firestore/core/src/firebase/firestore/core/database_info.h"
 #include "Firestore/core/src/firebase/firestore/model/database_id.h"
+#include "Firestore/core/src/firebase/firestore/model/resource_path.h"
 #include "Firestore/core/src/firebase/firestore/util/string_apple.h"
+#include "absl/memory/memory.h"
 
 namespace util = firebase::firestore::util;
+using firebase::firestore::auth::CredentialsProvider;
+using firebase::firestore::auth::FirebaseCredentialsProvider;
 using firebase::firestore::core::DatabaseInfo;
 using firebase::firestore::model::DatabaseId;
+using firebase::firestore::model::ResourcePath;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -51,11 +60,11 @@ extern "C" NSString *const FIRFirestoreErrorDomain = @"FIRFirestoreErrorDomain";
 
 @interface FIRFirestore () {
   /** The actual owned DatabaseId instance is allocated in FIRFirestore. */
-  firebase::firestore::model::DatabaseId _databaseID;
+  DatabaseId _databaseID;
+  std::unique_ptr<CredentialsProvider> _credentialsProvider;
 }
 
 @property(nonatomic, strong) NSString *persistenceKey;
-@property(nonatomic, strong) id<FSTCredentialsProvider> credentialsProvider;
 @property(nonatomic, strong) FSTDispatchQueue *workerDispatchQueue;
 
 // Note that `client` is updated after initialization, but marking this readwrite would generate an
@@ -80,6 +89,36 @@ extern "C" NSString *const FIRFirestoreErrorDomain = @"FIRFirestoreErrorDomain";
   return instances;
 }
 
++ (void)initialize {
+  NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+  [center addObserverForName:kFIRAppDeleteNotification
+                      object:nil
+                       queue:nil
+                  usingBlock:^(NSNotification *_Nonnull note) {
+                    NSString *appName = note.userInfo[kFIRAppNameKey];
+                    if (appName == nil) return;
+
+                    NSMutableDictionary *instances = [self instances];
+                    @synchronized(instances) {
+                      // Since the key for instances isn't just the app name, iterate over all the
+                      // keys to get the one(s) we have to delete. There could be multiple in case
+                      // the user calls firestoreForApp:database:.
+                      NSMutableArray *keysToDelete = [[NSMutableArray alloc] init];
+                      NSString *keyPrefix = [NSString stringWithFormat:@"%@|", appName];
+                      for (NSString *key in instances.allKeys) {
+                        if ([key hasPrefix:keyPrefix]) {
+                          [keysToDelete addObject:key];
+                        }
+                      }
+
+                      // Loop through the keys found and delete them from the stored instances.
+                      for (NSString *key in keysToDelete) {
+                        [instances removeObjectForKey:key];
+                      }
+                    }
+                  }];
+}
+
 + (instancetype)firestore {
   FIRApp *app = [FIRApp defaultApp];
   if (!app) {
@@ -87,13 +126,11 @@ extern "C" NSString *const FIRFirestoreErrorDomain = @"FIRFirestoreErrorDomain";
                          @"Failed to get FirebaseApp instance. Please call FirebaseApp.configure() "
                          @"before using Firestore");
   }
-  return
-      [self firestoreForApp:app database:util::WrapNSStringNoCopy(DatabaseId::kDefaultDatabaseId)];
+  return [self firestoreForApp:app database:util::WrapNSStringNoCopy(DatabaseId::kDefault)];
 }
 
 + (instancetype)firestoreForApp:(FIRApp *)app {
-  return
-      [self firestoreForApp:app database:util::WrapNSStringNoCopy(DatabaseId::kDefaultDatabaseId)];
+  return [self firestoreForApp:app database:util::WrapNSStringNoCopy(DatabaseId::kDefault)];
 }
 
 // TODO(b/62410906): make this public
@@ -105,10 +142,13 @@ extern "C" NSString *const FIRFirestoreErrorDomain = @"FIRFirestoreErrorDomain";
   }
   if (!database) {
     FSTThrowInvalidArgument(
-        @"database identifier may not be nil. Use '%@' if you want the default "
+        @"database identifier may not be nil. Use '%s' if you want the default "
          "database",
-        util::WrapNSStringNoCopy(DatabaseId::kDefaultDatabaseId));
+        DatabaseId::kDefault);
   }
+
+  // Note: If the key format changes, please change the code that detects FIRApps being deleted
+  // contained in +initialize. It checks for the app's name followed by a | character.
   NSString *key = [NSString stringWithFormat:@"%@|%@", app.name, database];
 
   NSMutableDictionary<NSString *, FIRFirestore *> *instances = self.instances;
@@ -121,15 +161,15 @@ extern "C" NSString *const FIRFirestoreErrorDomain = @"FIRFirestoreErrorDomain";
       FSTDispatchQueue *workerDispatchQueue = [FSTDispatchQueue
           queueWith:dispatch_queue_create("com.google.firebase.firestore", DISPATCH_QUEUE_SERIAL)];
 
-      id<FSTCredentialsProvider> credentialsProvider;
-      credentialsProvider = [[FSTFirebaseCredentialsProvider alloc] initWithApp:app];
+      std::unique_ptr<CredentialsProvider> credentials_provider =
+          absl::make_unique<FirebaseCredentialsProvider>(app);
 
       NSString *persistenceKey = app.name;
 
-      firestore = [[FIRFirestore alloc] initWithProjectID:projectID
-                                                 database:database
+      firestore = [[FIRFirestore alloc] initWithProjectID:util::MakeStringView(projectID)
+                                                 database:util::MakeStringView(database)
                                            persistenceKey:persistenceKey
-                                      credentialsProvider:credentialsProvider
+                                      credentialsProvider:std::move(credentials_provider)
                                       workerDispatchQueue:workerDispatchQueue
                                               firebaseApp:app];
       instances[key] = firestore;
@@ -139,14 +179,14 @@ extern "C" NSString *const FIRFirestoreErrorDomain = @"FIRFirestoreErrorDomain";
   }
 }
 
-- (instancetype)initWithProjectID:(NSString *)projectID
-                         database:(NSString *)database
+- (instancetype)initWithProjectID:(const absl::string_view)projectID
+                         database:(const absl::string_view)database
                    persistenceKey:(NSString *)persistenceKey
-              credentialsProvider:(id<FSTCredentialsProvider>)credentialsProvider
+              credentialsProvider:(std::unique_ptr<CredentialsProvider>)credentialsProvider
               workerDispatchQueue:(FSTDispatchQueue *)workerDispatchQueue
                       firebaseApp:(FIRApp *)app {
   if (self = [super init]) {
-    _databaseID = DatabaseId(util::MakeStringView(projectID), util::MakeStringView(database));
+    _databaseID = DatabaseId(projectID, database);
     FSTPreConverterBlock block = ^id _Nullable(id _Nullable input) {
       if ([input isKindOfClass:[FIRDocumentReference class]]) {
         FIRDocumentReference *documentReference = (FIRDocumentReference *)input;
@@ -159,7 +199,7 @@ extern "C" NSString *const FIRFirestoreErrorDomain = @"FIRFirestoreErrorDomain";
     _dataConverter =
         [[FSTUserDataConverter alloc] initWithDatabaseID:&_databaseID preConverter:block];
     _persistenceKey = persistenceKey;
-    _credentialsProvider = credentialsProvider;
+    _credentialsProvider = std::move(credentialsProvider);
     _workerDispatchQueue = workerDispatchQueue;
     _app = app;
     _settings = [[FIRFirestoreSettings alloc] init];
@@ -210,7 +250,7 @@ extern "C" NSString *const FIRFirestoreErrorDomain = @"FIRFirestoreErrorDomain";
 
       _client = [FSTFirestoreClient clientWithDatabaseInfo:database_info
                                             usePersistence:_settings.persistenceEnabled
-                                       credentialsProvider:_credentialsProvider
+                                       credentialsProvider:_credentialsProvider.get()
                                          userDispatchQueue:userDispatchQueue
                                        workerDispatchQueue:_workerDispatchQueue];
     }
@@ -222,7 +262,7 @@ extern "C" NSString *const FIRFirestoreErrorDomain = @"FIRFirestoreErrorDomain";
     FSTThrowInvalidArgument(@"Collection path cannot be nil.");
   }
   [self ensureClientConfigured];
-  FSTResourcePath *path = [FSTResourcePath pathWithString:collectionPath];
+  const ResourcePath path = ResourcePath::FromString(util::MakeStringView(collectionPath));
   return [FIRCollectionReference referenceWithPath:path firestore:self];
 }
 
@@ -231,7 +271,7 @@ extern "C" NSString *const FIRFirestoreErrorDomain = @"FIRFirestoreErrorDomain";
     FSTThrowInvalidArgument(@"Document path cannot be nil.");
   }
   [self ensureClientConfigured];
-  FSTResourcePath *path = [FSTResourcePath pathWithString:documentPath];
+  const ResourcePath path = ResourcePath::FromString(util::MakeStringView(documentPath));
   return [FIRDocumentReference referenceWithPath:path firestore:self];
 }
 

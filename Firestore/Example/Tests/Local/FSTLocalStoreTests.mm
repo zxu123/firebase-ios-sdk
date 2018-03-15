@@ -16,11 +16,10 @@
 
 #import "Firestore/Source/Local/FSTLocalStore.h"
 
+#import <FirebaseFirestore/FIRTimestamp.h>
 #import <XCTest/XCTest.h>
 
-#import "Firestore/Source/Auth/FSTUser.h"
 #import "Firestore/Source/Core/FSTQuery.h"
-#import "Firestore/Source/Core/FSTTimestamp.h"
 #import "Firestore/Source/Local/FSTEagerGarbageCollector.h"
 #import "Firestore/Source/Local/FSTLocalWriteResult.h"
 #import "Firestore/Source/Local/FSTNoOpGarbageCollector.h"
@@ -31,7 +30,6 @@
 #import "Firestore/Source/Model/FSTDocumentSet.h"
 #import "Firestore/Source/Model/FSTMutation.h"
 #import "Firestore/Source/Model/FSTMutationBatch.h"
-#import "Firestore/Source/Model/FSTPath.h"
 #import "Firestore/Source/Remote/FSTRemoteEvent.h"
 #import "Firestore/Source/Remote/FSTWatchChange.h"
 #import "Firestore/Source/Util/FSTClasses.h"
@@ -41,6 +39,10 @@
 #import "Firestore/Example/Tests/Util/FSTHelpers.h"
 #import "Firestore/third_party/Immutable/Tests/FSTImmutableSortedDictionary+Testing.h"
 #import "Firestore/third_party/Immutable/Tests/FSTImmutableSortedSet+Testing.h"
+
+#include "Firestore/core/src/firebase/firestore/auth/user.h"
+
+using firebase::firestore::auth::User;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -77,7 +79,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   id<FSTGarbageCollector> garbageCollector = [[FSTEagerGarbageCollector alloc] init];
   self.localStore = [[FSTLocalStore alloc] initWithPersistence:persistence
                                               garbageCollector:garbageCollector
-                                                   initialUser:[FSTUser unauthenticatedUser]];
+                                                   initialUser:User::Unauthenticated()];
   [self.localStore start];
 
   _batches = [NSMutableArray array];
@@ -112,7 +114,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   id<FSTGarbageCollector> garbageCollector = [[FSTNoOpGarbageCollector alloc] init];
   self.localStore = [[FSTLocalStore alloc] initWithPersistence:self.localStorePersistence
                                               garbageCollector:garbageCollector
-                                                   initialUser:[FSTUser unauthenticatedUser]];
+                                                   initialUser:User::Unauthenticated()];
   [self.localStore start];
 }
 
@@ -124,7 +126,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTLocalWriteResult *result = [self.localStore locallyWriteMutations:mutations];
   XCTAssertNotNil(result);
   [self.batches addObject:[[FSTMutationBatch alloc] initWithBatchID:result.batchID
-                                                     localWriteTime:[FSTTimestamp timestamp]
+                                                     localWriteTime:[FIRTimestamp timestamp]
                                                           mutations:mutations]];
   self.lastChanges = result.changes;
 }
@@ -225,7 +227,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTMutation *set1 = FSTTestSetMutation(@"foo/bar", @{@"foo" : @"bar"});
   FSTMutation *set2 = FSTTestSetMutation(@"bar/baz", @{@"bar" : @"baz"});
   FSTMutationBatch *batch = [[FSTMutationBatch alloc] initWithBatchID:1
-                                                       localWriteTime:[FSTTimestamp timestamp]
+                                                       localWriteTime:[FIRTimestamp timestamp]
                                                             mutations:@[ set1, set2 ]];
   FSTDocumentKeySet *keys = [batch keys];
   XCTAssertEqual(keys.count, 2);
@@ -260,7 +262,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   if ([self isTestBaseClass]) return;
 
   // Start a query that requires acks to be held.
-  FSTQuery *query = FSTTestQuery(@"foo");
+  FSTQuery *query = FSTTestQuery("foo");
   [self allocateQuery:query];
 
   [self writeMutation:FSTTestSetMutation(@"foo/bar", @{@"foo" : @"bar"})];
@@ -339,7 +341,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 - (void)testHandlesPatchWithoutPriorDocument {
   if ([self isTestBaseClass]) return;
 
-  [self writeMutation:FSTTestPatchMutation(@"foo/bar", @{@"foo" : @"bar"}, nil)];
+  [self writeMutation:FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})];
   FSTAssertRemoved(@[ @"foo/bar" ]);
   FSTAssertNotContains(@"foo/bar");
 
@@ -351,7 +353,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 - (void)testHandlesPatchMutationThenDocumentThenAck {
   if ([self isTestBaseClass]) return;
 
-  [self writeMutation:FSTTestPatchMutation(@"foo/bar", @{@"foo" : @"bar"}, nil)];
+  [self writeMutation:FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})];
   FSTAssertRemoved(@[ @"foo/bar" ]);
   FSTAssertNotContains(@"foo/bar");
 
@@ -368,7 +370,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 - (void)testHandlesPatchMutationThenAckThenDocument {
   if ([self isTestBaseClass]) return;
 
-  [self writeMutation:FSTTestPatchMutation(@"foo/bar", @{@"foo" : @"bar"}, nil)];
+  [self writeMutation:FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})];
   FSTAssertRemoved(@[ @"foo/bar" ]);
   FSTAssertNotContains(@"foo/bar");
 
@@ -453,7 +455,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTAssertChanged(@[ FSTTestDoc(@"foo/bar", 0, @{@"foo" : @"old"}, YES) ]);
   FSTAssertContains(FSTTestDoc(@"foo/bar", 0, @{@"foo" : @"old"}, YES));
 
-  [self writeMutation:FSTTestPatchMutation(@"foo/bar", @{@"foo" : @"bar"}, nil)];
+  [self writeMutation:FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})];
   FSTAssertChanged(@[ FSTTestDoc(@"foo/bar", 0, @{@"foo" : @"bar"}, YES) ]);
   FSTAssertContains(FSTTestDoc(@"foo/bar", 0, @{@"foo" : @"bar"}, YES));
 
@@ -476,7 +478,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   [self writeMutations:@[
     FSTTestSetMutation(@"foo/bar", @{@"foo" : @"old"}),
-    FSTTestPatchMutation(@"foo/bar", @{@"foo" : @"bar"}, nil)
+    FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})
   ]];
 
   FSTAssertChanged(@[ FSTTestDoc(@"foo/bar", 0, @{@"foo" : @"bar"}, YES) ]);
@@ -490,7 +492,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   [self acknowledgeMutationWithVersion:1];
   FSTAssertContains(FSTTestDoc(@"foo/bar", 0, @{@"foo" : @"old"}, NO));
 
-  [self writeMutation:FSTTestPatchMutation(@"foo/bar", @{@"foo" : @"bar"}, nil)];
+  [self writeMutation:FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})];
   FSTAssertContains(FSTTestDoc(@"foo/bar", 0, @{@"foo" : @"bar"}, YES));
 
   [self rejectMutation];
@@ -504,7 +506,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   [self writeMutations:@[
     FSTTestSetMutation(@"foo/bar", @{@"foo" : @"old"}),
     FSTTestSetMutation(@"bar/baz", @{@"bar" : @"baz"}),
-    FSTTestPatchMutation(@"foo/bar", @{@"foo" : @"bar"}, nil)
+    FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})
   ]];
 
   FSTAssertChanged((@[
@@ -522,7 +524,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTAssertRemoved(@[ @"foo/bar" ]);
   FSTAssertContains(FSTTestDeletedDoc(@"foo/bar", 0));
 
-  [self writeMutation:FSTTestPatchMutation(@"foo/bar", @{@"foo" : @"bar"}, nil)];
+  [self writeMutation:FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})];
   FSTAssertRemoved(@[ @"foo/bar" ]);
   FSTAssertContains(FSTTestDeletedDoc(@"foo/bar", 0));
 
@@ -553,7 +555,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 - (void)testCollectsGarbageAfterChangeBatch {
   if ([self isTestBaseClass]) return;
 
-  FSTQuery *query = FSTTestQuery(@"foo");
+  FSTQuery *query = FSTTestQuery("foo");
   [self allocateQuery:query];
   FSTAssertTargetID(2);
 
@@ -574,7 +576,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc(@"foo/bar", 0, @{@"foo" : @"old"}, NO),
                                                   @[ @1 ], @[])];
-  [self writeMutation:FSTTestPatchMutation(@"foo/bar", @{@"foo" : @"bar"}, nil)];
+  [self writeMutation:FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})];
   [self writeMutation:FSTTestSetMutation(@"foo/bah", @{@"foo" : @"bah"})];
   [self writeMutation:FSTTestDeleteMutation(@"foo/baz")];
   [self collectGarbage];
@@ -606,7 +608,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc(@"foo/bar", 0, @{@"foo" : @"old"}, NO),
                                                   @[ @1 ], @[])];
-  [self writeMutation:FSTTestPatchMutation(@"foo/bar", @{@"foo" : @"bar"}, nil)];
+  [self writeMutation:FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})];
   [self writeMutation:FSTTestSetMutation(@"foo/bah", @{@"foo" : @"bah"})];
   [self writeMutation:FSTTestDeleteMutation(@"foo/baz")];
   [self collectGarbage];
@@ -636,7 +638,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 - (void)testPinsDocumentsInTheLocalView {
   if ([self isTestBaseClass]) return;
 
-  FSTQuery *query = FSTTestQuery(@"foo");
+  FSTQuery *query = FSTTestQuery("foo");
   [self allocateQuery:query];
   FSTAssertTargetID(2);
 
@@ -684,7 +686,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
     FSTTestSetMutation(@"foo/baz", @{@"foo" : @"baz"}),
     FSTTestSetMutation(@"foo/bar/Foo/Bar", @{@"Foo" : @"Bar"})
   ]];
-  FSTQuery *query = FSTTestQuery(@"foo/bar");
+  FSTQuery *query = FSTTestQuery("foo/bar");
   FSTDocumentDictionary *docs = [self.localStore executeQuery:query];
   XCTAssertEqualObjects([docs values], @[ FSTTestDoc(@"foo/bar", 0, @{@"foo" : @"bar"}, YES) ]);
 }
@@ -699,7 +701,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
     FSTTestSetMutation(@"foo/bar/Foo/Bar", @{@"Foo" : @"Bar"}),
     FSTTestSetMutation(@"fooo/blah", @{@"fooo" : @"blah"})
   ]];
-  FSTQuery *query = FSTTestQuery(@"foo");
+  FSTQuery *query = FSTTestQuery("foo");
   FSTDocumentDictionary *docs = [self.localStore executeQuery:query];
   XCTAssertEqualObjects([docs values], (@[
                           FSTTestDoc(@"foo/bar", 0, @{@"foo" : @"bar"}, YES),
@@ -710,7 +712,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 - (void)testCanExecuteMixedCollectionQueries {
   if ([self isTestBaseClass]) return;
 
-  FSTQuery *query = FSTTestQuery(@"foo");
+  FSTQuery *query = FSTTestQuery("foo");
   [self allocateQuery:query];
   FSTAssertTargetID(2);
 
@@ -735,7 +737,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   // This test only works in the absence of the FSTEagerGarbageCollector.
   [self restartWithNoopGarbageCollector];
 
-  FSTQuery *query = FSTTestQuery(@"foo/bar");
+  FSTQuery *query = FSTTestQuery("foo/bar");
   FSTQueryData *queryData = [self.localStore allocateQuery:query];
   FSTBoxedTargetID *targetID = @(queryData.targetID);
   NSData *resumeToken = FSTTestResumeTokenFromSnapshotVersion(1000);
@@ -769,7 +771,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   if ([self isTestBaseClass]) return;
   [self restartWithNoopGarbageCollector];
 
-  FSTQuery *query = FSTTestQuery(@"foo");
+  FSTQuery *query = FSTTestQuery("foo");
   [self allocateQuery:query];
   FSTAssertTargetID(2);
 

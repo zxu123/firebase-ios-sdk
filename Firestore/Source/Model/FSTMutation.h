@@ -16,14 +16,17 @@
 
 #import <Foundation/Foundation.h>
 
+#include <vector>
+
+#include "Firestore/core/src/firebase/firestore/model/field_path.h"
+
 @class FSTDocument;
 @class FSTDocumentKey;
-@class FSTFieldPath;
 @class FSTFieldValue;
 @class FSTMaybeDocument;
 @class FSTObjectValue;
 @class FSTSnapshotVersion;
-@class FSTTimestamp;
+@class FIRTimestamp;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -46,9 +49,10 @@ NS_ASSUME_NONNULL_BEGIN
  * Initializes the field mask with the given field paths. Caller is expected to either copy or
  * or release the array of fields.
  */
-- (instancetype)initWithFields:(NSArray<FSTFieldPath *> *)fields NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithFields:(std::vector<firebase::firestore::model::FieldPath>)fields
+    NS_DESIGNATED_INITIALIZER;
 
-@property(nonatomic, strong, readonly) NSArray<FSTFieldPath *> *fields;
+- (const std::vector<firebase::firestore::model::FieldPath> &)fields;
 @end
 
 #pragma mark - FSTFieldTransform
@@ -65,9 +69,9 @@ NS_ASSUME_NONNULL_BEGIN
 /** A field path and the FSTTransformOperation to perform upon it. */
 @interface FSTFieldTransform : NSObject
 - (instancetype)init NS_UNAVAILABLE;
-- (instancetype)initWithPath:(FSTFieldPath *)path
+- (instancetype)initWithPath:(firebase::firestore::model::FieldPath)path
                    transform:(id<FSTTransformOperation>)transform NS_DESIGNATED_INITIALIZER;
-@property(nonatomic, strong, readonly) FSTFieldPath *path;
+- (const firebase::firestore::model::FieldPath &)path;
 @property(nonatomic, strong, readonly) id<FSTTransformOperation> transform;
 @end
 
@@ -200,7 +204,7 @@ typedef NS_ENUM(NSUInteger, FSTPreconditionExists) {
  */
 - (nullable FSTMaybeDocument *)applyTo:(nullable FSTMaybeDocument *)maybeDoc
                           baseDocument:(nullable FSTMaybeDocument *)baseDoc
-                        localWriteTime:(FSTTimestamp *)localWriteTime
+                        localWriteTime:(FIRTimestamp *)localWriteTime
                         mutationResult:(nullable FSTMutationResult *)mutationResult;
 
 /**
@@ -209,7 +213,7 @@ typedef NS_ENUM(NSUInteger, FSTPreconditionExists) {
  */
 - (nullable FSTMaybeDocument *)applyTo:(nullable FSTMaybeDocument *)maybeDoc
                           baseDocument:(nullable FSTMaybeDocument *)baseDoc
-                        localWriteTime:(nullable FSTTimestamp *)localWriteTime;
+                        localWriteTime:(nullable FIRTimestamp *)localWriteTime;
 
 @property(nonatomic, strong, readonly) FSTDocumentKey *key;
 

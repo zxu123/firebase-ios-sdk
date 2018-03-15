@@ -16,14 +16,14 @@
 
 #import "Firestore/Example/Tests/SpecTests/FSTSpecTests.h"
 
+#include <utility>
+
 #import <FirebaseFirestore/FIRFirestoreErrors.h>
 #import <GRPCClient/GRPCCall.h>
 
-#import "Firestore/Source/Auth/FSTUser.h"
 #import "Firestore/Source/Core/FSTEventManager.h"
 #import "Firestore/Source/Core/FSTQuery.h"
 #import "Firestore/Source/Core/FSTSnapshotVersion.h"
-#import "Firestore/Source/Core/FSTViewSnapshot.h"
 #import "Firestore/Source/Local/FSTEagerGarbageCollector.h"
 #import "Firestore/Source/Local/FSTNoOpGarbageCollector.h"
 #import "Firestore/Source/Local/FSTPersistence.h"
@@ -32,16 +32,22 @@
 #import "Firestore/Source/Model/FSTDocumentKey.h"
 #import "Firestore/Source/Model/FSTFieldValue.h"
 #import "Firestore/Source/Model/FSTMutation.h"
-#import "Firestore/Source/Model/FSTPath.h"
 #import "Firestore/Source/Remote/FSTExistenceFilter.h"
 #import "Firestore/Source/Remote/FSTWatchChange.h"
 #import "Firestore/Source/Util/FSTAssert.h"
 #import "Firestore/Source/Util/FSTClasses.h"
+#import "Firestore/Source/Util/FSTDispatchQueue.h"
 #import "Firestore/Source/Util/FSTLogger.h"
 
 #import "Firestore/Example/Tests/Remote/FSTWatchChange+Testing.h"
 #import "Firestore/Example/Tests/SpecTests/FSTSyncEngineTestDriver.h"
 #import "Firestore/Example/Tests/Util/FSTHelpers.h"
+
+#include "Firestore/core/src/firebase/firestore/auth/user.h"
+#include "Firestore/core/src/firebase/firestore/util/string_apple.h"
+
+namespace util = firebase::firestore::util;
+using firebase::firestore::auth::User;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -103,11 +109,11 @@ static NSString *const kNoIOSTag = @"no-ios";
 
 - (nullable FSTQuery *)parseQuery:(id)querySpec {
   if ([querySpec isKindOfClass:[NSString class]]) {
-    return FSTTestQuery(querySpec);
+    return FSTTestQuery(util::MakeStringView((NSString *)querySpec));
   } else if ([querySpec isKindOfClass:[NSDictionary class]]) {
     NSDictionary *queryDict = (NSDictionary *)querySpec;
     NSString *path = queryDict[@"path"];
-    __block FSTQuery *query = FSTTestQuery(path);
+    __block FSTQuery *query = FSTTestQuery(util::MakeStringView(path));
     if (queryDict[@"limit"]) {
       NSNumber *limit = queryDict[@"limit"];
       query = [query queryBySettingLimit:limit.integerValue];
@@ -116,14 +122,16 @@ static NSString *const kNoIOSTag = @"no-ios";
       NSArray *filters = queryDict[@"filters"];
       [filters enumerateObjectsUsingBlock:^(NSArray *_Nonnull filter, NSUInteger idx,
                                             BOOL *_Nonnull stop) {
-        query = [query queryByAddingFilter:FSTTestFilter(filter[0], filter[1], filter[2])];
+        query = [query queryByAddingFilter:FSTTestFilter(util::MakeStringView(filter[0]), filter[1],
+                                                         filter[2])];
       }];
     }
     if (queryDict[@"orderBys"]) {
       NSArray *orderBys = queryDict[@"orderBys"];
       [orderBys enumerateObjectsUsingBlock:^(NSArray *_Nonnull orderBy, NSUInteger idx,
                                              BOOL *_Nonnull stop) {
-        query = [query queryByAddingSortOrder:FSTTestOrderBy(orderBy[0], orderBy[1])];
+        query = [query
+            queryByAddingSortOrder:FSTTestOrderBy(util::MakeStringView(orderBy[0]), orderBy[1])];
       }];
     }
     return query;
@@ -169,7 +177,8 @@ static NSString *const kNoIOSTag = @"no-ios";
 }
 
 - (void)doPatch:(NSArray *)patchSpec {
-  [self.driver writeUserMutation:FSTTestPatchMutation(patchSpec[0], patchSpec[1], nil)];
+  [self.driver
+      writeUserMutation:FSTTestPatchMutation(util::MakeStringView(patchSpec[0]), patchSpec[1], {})];
 }
 
 - (void)doDelete:(NSString *)key {
@@ -318,6 +327,27 @@ static NSString *const kNoIOSTag = @"no-ios";
   }
 }
 
+- (void)doRunTimer:(NSString *)timer {
+  FSTTimerID timerID;
+  if ([timer isEqualToString:@"all"]) {
+    timerID = FSTTimerIDAll;
+  } else if ([timer isEqualToString:@"listen_stream_idle"]) {
+    timerID = FSTTimerIDListenStreamIdle;
+  } else if ([timer isEqualToString:@"listen_stream_connection"]) {
+    timerID = FSTTimerIDListenStreamConnectionBackoff;
+  } else if ([timer isEqualToString:@"write_stream_idle"]) {
+    timerID = FSTTimerIDWriteStreamIdle;
+  } else if ([timer isEqualToString:@"write_stream_connection"]) {
+    timerID = FSTTimerIDWriteStreamConnectionBackoff;
+  } else if ([timer isEqualToString:@"online_state_timeout"]) {
+    timerID = FSTTimerIDOnlineStateTimeout;
+  } else {
+    FSTFail(@"runTimer spec step specified unknown timer: %@", timer);
+  }
+
+  [self.driver runTimer:timerID];
+}
+
 - (void)doDisableNetwork {
   [self.driver disableNetwork];
 }
@@ -327,15 +357,17 @@ static NSString *const kNoIOSTag = @"no-ios";
 }
 
 - (void)doChangeUser:(id)UID {
-  FSTUser *user = [UID isEqual:[NSNull null]] ? [FSTUser unauthenticatedUser]
-                                              : [[FSTUser alloc] initWithUID:UID];
-  [self.driver changeUser:user];
+  if ([UID isEqual:[NSNull null]]) {
+    UID = nil;
+  }
+  [self.driver changeUser:User::FromUid(UID)];
 }
 
 - (void)doRestart {
   // Any outstanding user writes should be automatically re-sent, so we want to preserve them
   // when re-creating the driver.
-  FSTOutstandingWriteQueues *outstandingWrites = self.driver.outstandingWrites;
+  FSTOutstandingWriteQueues outstandingWrites = self.driver.outstandingWrites;
+  User currentUser = self.driver.currentUser;
 
   [self.driver shutdown];
 
@@ -347,7 +379,7 @@ static NSString *const kNoIOSTag = @"no-ios";
 
   self.driver = [[FSTSyncEngineTestDriver alloc] initWithPersistence:self.driverPersistence
                                                     garbageCollector:self.garbageCollector
-                                                         initialUser:self.driver.currentUser
+                                                         initialUser:currentUser
                                                    outstandingWrites:outstandingWrites];
   [self.driver start];
 }
@@ -384,6 +416,8 @@ static NSString *const kNoIOSTag = @"no-ios";
     [self doWriteAck:step[@"writeAck"]];
   } else if (step[@"failWrite"]) {
     [self doFailWrite:step[@"failWrite"]];
+  } else if (step[@"runTimer"]) {
+    [self doRunTimer:step[@"runTimer"]];
   } else if (step[@"enableNetwork"]) {
     if ([step[@"enableNetwork"] boolValue]) {
       [self doEnableNetwork];

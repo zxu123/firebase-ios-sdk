@@ -22,7 +22,6 @@
 #include <string>
 
 #import "Firestore/Protos/objc/firestore/local/Mutation.pbobjc.h"
-#import "Firestore/Source/Auth/FSTUser.h"
 #import "Firestore/Source/Core/FSTQuery.h"
 #import "Firestore/Source/Local/FSTLevelDB.h"
 #import "Firestore/Source/Local/FSTLevelDBKey.h"
@@ -31,15 +30,19 @@
 #import "Firestore/Source/Model/FSTDocumentKey.h"
 #import "Firestore/Source/Model/FSTMutation.h"
 #import "Firestore/Source/Model/FSTMutationBatch.h"
-#import "Firestore/Source/Model/FSTPath.h"
 #import "Firestore/Source/Util/FSTAssert.h"
 
+#include "Firestore/core/src/firebase/firestore/auth/user.h"
+#include "Firestore/core/src/firebase/firestore/model/resource_path.h"
+#include "Firestore/core/src/firebase/firestore/util/string_apple.h"
 #include "Firestore/core/src/firebase/firestore/util/string_util.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
 namespace util = firebase::firestore::util;
 using Firestore::StringView;
+using firebase::firestore::auth::User;
+using firebase::firestore::model::ResourcePath;
 using leveldb::DB;
 using leveldb::Iterator;
 using leveldb::ReadOptions;
@@ -89,11 +92,10 @@ static ReadOptions StandardReadOptions() {
   std::shared_ptr<DB> _db;
 }
 
-+ (instancetype)mutationQueueWithUser:(FSTUser *)user
++ (instancetype)mutationQueueWithUser:(const User &)user
                                    db:(std::shared_ptr<DB>)db
                            serializer:(FSTLocalSerializer *)serializer {
-  FSTAssert(![user.UID isEqual:@""], @"UserID must not be an empty string.");
-  NSString *userID = user.isUnauthenticated ? @"" : user.UID;
+  NSString *userID = user.is_authenticated() ? util::WrapNSString(user.uid()) : @"";
 
   return [[FSTLevelDBMutationQueue alloc] initWithUserID:userID db:db serializer:serializer];
 }
@@ -102,7 +104,7 @@ static ReadOptions StandardReadOptions() {
                             db:(std::shared_ptr<DB>)db
                     serializer:(FSTLocalSerializer *)serializer {
   if (self = [super init]) {
-    _userID = userID;
+    _userID = [userID copy];
     _db = db;
     _serializer = serializer;
   }
@@ -268,7 +270,7 @@ static ReadOptions StandardReadOptions() {
   }
 }
 
-- (FSTMutationBatch *)addMutationBatchWithWriteTime:(FSTTimestamp *)localWriteTime
+- (FSTMutationBatch *)addMutationBatchWithWriteTime:(FIRTimestamp *)localWriteTime
                                           mutations:(NSArray<FSTMutation *> *)mutations
                                               group:(FSTWriteGroup *)group {
   FSTBatchID batchID = self.nextBatchID;
@@ -314,7 +316,12 @@ static ReadOptions StandardReadOptions() {
 }
 
 - (nullable FSTMutationBatch *)nextMutationBatchAfterBatchID:(FSTBatchID)batchID {
-  std::string key = [self mutationKeyForBatchID:batchID + 1];
+  // All batches with batchID <= self.metadata.lastAcknowledgedBatchId have been acknowledged so
+  // the first unacknowledged batch after batchID will have a batchID larger than both of these
+  // values.
+  FSTBatchID nextBatchID = MAX(batchID, self.metadata.lastAcknowledgedBatchId) + 1;
+
+  std::string key = [self mutationKeyForBatchID:nextBatchID];
   std::unique_ptr<Iterator> it(_db->NewIterator(StandardReadOptions()));
   it->Seek(key);
 
@@ -335,7 +342,7 @@ static ReadOptions StandardReadOptions() {
     return nil;
   }
 
-  FSTAssert(rowKey.batchID > batchID, @"Should have found mutation after %d", batchID);
+  FSTAssert(rowKey.batchID >= nextBatchID, @"Should have found mutation after %d", nextBatchID);
   return [self decodedMutationBatch:it->value()];
 }
 
@@ -425,8 +432,8 @@ static ReadOptions StandardReadOptions() {
   FSTAssert(![query isDocumentQuery], @"Document queries shouldn't go down this path");
   NSString *userID = self.userID;
 
-  FSTResourcePath *queryPath = query.path;
-  int immediateChildrenPathLength = queryPath.length + 1;
+  const ResourcePath &queryPath = query.path;
+  size_t immediateChildrenPathLength = queryPath.size() + 1;
 
   // TODO(mcg): Actually implement a single-collection query
   //
@@ -466,7 +473,7 @@ static ReadOptions StandardReadOptions() {
     // Rows with document keys more than one segment longer than the query path can't be matches.
     // For example, a query on 'rooms' can't match the document /rooms/abc/messages/xyx.
     // TODO(mcg): we'll need a different scanner when we implement ancestor queries.
-    if (rowKey.documentKey.path.length != immediateChildrenPathLength) {
+    if (rowKey.documentKey.path.size() != immediateChildrenPathLength) {
       continue;
     }
 

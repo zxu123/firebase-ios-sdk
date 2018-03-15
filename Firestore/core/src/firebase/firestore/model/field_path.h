@@ -35,6 +35,9 @@ namespace model {
  */
 class FieldPath : public impl::BasePath<FieldPath> {
  public:
+  /** The field path string that represents the document's key. */
+  static constexpr const char* kDocumentKeyPath = "__name__";
+
   // Note: Xcode 8.2 requires explicit specification of the constructor.
   FieldPath() : impl::BasePath<FieldPath>() {
   }
@@ -44,6 +47,8 @@ class FieldPath : public impl::BasePath<FieldPath> {
   FieldPath(const IterT begin, const IterT end) : BasePath{begin, end} {
   }
   FieldPath(std::initializer_list<std::string> list) : BasePath{list} {
+  }
+  explicit FieldPath(SegmentsT&& segments) : BasePath{std::move(segments)} {
   }
 
   /**
@@ -80,14 +85,6 @@ class FieldPath : public impl::BasePath<FieldPath> {
   bool operator>=(const FieldPath& rhs) const {
     return BasePath::operator>=(rhs);
   }
-
- private:
-  FieldPath(SegmentsT&& segments) : BasePath{std::move(segments)} {
-  }
-
-  // So that methods of base can construct FieldPath using the private
-  // constructor.
-  friend class BasePath;
 };
 
 }  // namespace model

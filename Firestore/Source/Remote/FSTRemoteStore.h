@@ -19,6 +19,8 @@
 #import "Firestore/Source/Core/FSTTypes.h"
 #import "Firestore/Source/Model/FSTDocumentVersionDictionary.h"
 
+#include "Firestore/core/src/firebase/firestore/auth/user.h"
+
 @class FSTDatastore;
 @class FSTDocumentKey;
 @class FSTLocalStore;
@@ -28,7 +30,7 @@
 @class FSTQueryData;
 @class FSTRemoteEvent;
 @class FSTTransaction;
-@class FSTUser;
+@class FSTDispatchQueue;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -94,10 +96,11 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @interface FSTRemoteStore : NSObject
 
-+ (instancetype)remoteStoreWithLocalStore:(FSTLocalStore *)localStore
-                                datastore:(FSTDatastore *)datastore;
+- (instancetype)initWithLocalStore:(FSTLocalStore *)localStore
+                         datastore:(FSTDatastore *)datastore
+               workerDispatchQueue:(FSTDispatchQueue *)queue;
 
-- (instancetype)init __attribute__((unavailable("Use static constructor method.")));
+- (instancetype)init NS_UNAVAILABLE;
 
 @property(nonatomic, weak) id<FSTRemoteSyncer> syncEngine;
 
@@ -121,7 +124,7 @@ NS_ASSUME_NONNULL_BEGIN
  * In response the remote store tears down streams and clears up any tracked operations that should
  * not persist across users. Restarts the streams if appropriate.
  */
-- (void)userDidChange:(FSTUser *)user;
+- (void)userDidChange:(const firebase::firestore::auth::User &)user;
 
 /** Listens to the target identified by the given FSTQueryData. */
 - (void)listenToTargetWithQueryData:(FSTQueryData *)queryData;

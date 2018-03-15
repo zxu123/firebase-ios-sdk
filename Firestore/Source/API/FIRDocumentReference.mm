@@ -34,10 +34,15 @@
 #import "Firestore/Source/Model/FSTDocumentSet.h"
 #import "Firestore/Source/Model/FSTFieldValue.h"
 #import "Firestore/Source/Model/FSTMutation.h"
-#import "Firestore/Source/Model/FSTPath.h"
 #import "Firestore/Source/Util/FSTAssert.h"
 #import "Firestore/Source/Util/FSTAsyncQueryListener.h"
 #import "Firestore/Source/Util/FSTUsageValidation.h"
+
+#include "Firestore/core/src/firebase/firestore/model/resource_path.h"
+#include "Firestore/core/src/firebase/firestore/util/string_apple.h"
+
+namespace util = firebase::firestore::util;
+using firebase::firestore::model::ResourcePath;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -85,12 +90,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 @implementation FIRDocumentReference (Internal)
 
-+ (instancetype)referenceWithPath:(FSTResourcePath *)path firestore:(FIRFirestore *)firestore {
-  if (path.length % 2 != 0) {
++ (instancetype)referenceWithPath:(const ResourcePath &)path firestore:(FIRFirestore *)firestore {
+  if (path.size() % 2 != 0) {
     FSTThrowInvalidArgument(
         @"Invalid document reference. Document references must have an even "
-         "number of segments, but %@ has %d",
-        path.canonicalString, path.length);
+         "number of segments, but %s has %zu",
+        path.CanonicalString().c_str(), path.size());
   }
   return
       [FIRDocumentReference referenceWithKey:[FSTDocumentKey keyWithPath:path] firestore:firestore];
@@ -136,24 +141,24 @@ NS_ASSUME_NONNULL_BEGIN
 #pragma mark - Public Methods
 
 - (NSString *)documentID {
-  return [self.key.path lastSegment];
+  return util::WrapNSString(self.key.path.last_segment());
 }
 
 - (FIRCollectionReference *)parent {
-  FSTResourcePath *parentPath = [self.key.path pathByRemovingLastSegment];
-  return [FIRCollectionReference referenceWithPath:parentPath firestore:self.firestore];
+  return
+      [FIRCollectionReference referenceWithPath:self.key.path.PopLast() firestore:self.firestore];
 }
 
 - (NSString *)path {
-  return [self.key.path canonicalString];
+  return util::WrapNSString(self.key.path.CanonicalString());
 }
 
 - (FIRCollectionReference *)collectionWithPath:(NSString *)collectionPath {
   if (!collectionPath) {
     FSTThrowInvalidArgument(@"Collection path cannot be nil.");
   }
-  FSTResourcePath *subPath = [FSTResourcePath pathWithString:collectionPath];
-  FSTResourcePath *path = [self.key.path pathByAppendingPath:subPath];
+  const ResourcePath subPath = ResourcePath::FromString(util::MakeStringView(collectionPath));
+  const ResourcePath path = self.key.path.Append(subPath);
   return [FIRCollectionReference referenceWithPath:path firestore:self.firestore];
 }
 

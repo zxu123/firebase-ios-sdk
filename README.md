@@ -54,10 +54,10 @@ pod 'FirebaseCore', :git => 'https://github.com/firebase/firebase-ios-sdk.git', 
 
 If your Podfile does not include *use_frameworks!*, you need to workaround
 a build issue with the FirebaseAnalytics umbrella header. Delete the first four lines
-of Pods/FirebaseAnalytics/Frameworks/FirebaseAnalytics.framework/Headers/FirebaseAnalytics.h
+of `Pods/FirebaseAnalytics/Frameworks/FirebaseAnalytics.framework/Headers/FirebaseAnalytics.h`
 or copy [patch/FirebaseAnalytics.h](patch/FirebaseAnalytics.h) to
-Pods/FirebaseAnalytics/Frameworks/FirebaseAnalytics.framework/Headers/FirebaseAnalytics.h.
-See the post_install phase of [Example/Podfile](Example/Podfile) for an example
+`Pods/FirebaseAnalytics/Frameworks/FirebaseAnalytics.framework/Headers/FirebaseAnalytics.h`.
+See the `post_install` phase of [Example/Podfile](Example/Podfile) for an example
 of applying the workaround automatically - make sure you correct the path of
 `patch/FirebaseAnalytics.h`.
 
@@ -149,6 +149,11 @@ Keep in mind that macOS and tvOS are not officially supported by Firebase, and t
 actively developed primarily for iOS. While we can catch basic unit test issues with Travis, there
 may be some changes where the SDK no longer works as expected on macOS or tvOS. If you encounter
 this, please [file an issue](https://github.com/firebase/firebase-ios-sdk/issues).
+
+## Carthage
+
+An experimental Carthage distribution is now available. See
+[Carthage](Carthage.md).
 
 ## Roadmap
 

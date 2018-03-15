@@ -19,6 +19,7 @@
 
 #include <initializer_list>
 #include <string>
+#include <utility>
 
 #include "Firestore/core/src/firebase/firestore/model/base_path.h"
 #include "absl/strings/string_view.h"
@@ -40,11 +41,13 @@ class ResourcePath : public impl::BasePath<ResourcePath> {
   }
   ResourcePath(std::initializer_list<std::string> list) : BasePath{list} {
   }
+  explicit ResourcePath(SegmentsT&& segments) : BasePath{std::move(segments)} {
+  }
   /**
    * Creates and returns a new path from the given resource-path string, where
    * the path segments are separated by a slash "/".
    */
-  static ResourcePath Parse(absl::string_view path);
+  static ResourcePath FromString(absl::string_view path);
 
   /** Returns a standardized string representation of this path. */
   std::string CanonicalString() const;
@@ -67,18 +70,10 @@ class ResourcePath : public impl::BasePath<ResourcePath> {
   bool operator>=(const ResourcePath& rhs) const {
     return BasePath::operator>=(rhs);
   }
-
- private:
-  ResourcePath(SegmentsT&& segments) : BasePath{std::move(segments)} {
-  }
-
-  // So that methods of base can construct ResourcePath using the private
-  // constructor.
-  friend class BasePath;
 };
 
 }  // namespace model
 }  // namespace firestore
 }  // namespace firebase
 
-#endif
+#endif  // FIRESTORE_CORE_SRC_FIREBASE_FIRESTORE_MODEL_RESOURCE_PATH_H_
