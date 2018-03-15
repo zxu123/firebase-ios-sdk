@@ -104,6 +104,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (long)byteSize {
   __block long result = 0;
   [self.docs enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, FSTMaybeDocument *value, BOOL *stop) {
+    result += key.path.byte_size();
 
   }];
 }
