@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-#import <XCTest/XCTest.h>
-
-
 #import "Firestore/Example/Tests/Local/FSTLRUGarbageCollectorTests.h"
 
-#import "Firestore/Source/Auth/FSTUser.h"
-#import "Firestore/Source/Core/FSTTimestamp.h"
+#import <XCTest/XCTest.h>
+#import <absl/strings/str_cat.h>
+
+#import "Firestore/Source/API/FIRTimestamp+Internal.h"
+
+#include "Firestore/core/src/firebase/firestore/auth/user.h"
 #import "Firestore/Source/Local/FSTLRUGarbageCollector.h"
 #import "Firestore/Source/Local/FSTMutationQueue.h"
 #import "Firestore/Source/Local/FSTPersistence.h"
@@ -30,6 +31,8 @@
 #import "Firestore/Source/Model/FSTMutation.h"
 #import "Firestore/Source/Util/FSTClasses.h"
 #import "Firestore/Example/Tests/Util/FSTHelpers.h"
+
+using firebase::firestore::auth::User;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -64,7 +67,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (FSTQueryData *)nextTestQuery {
   FSTTargetID targetID = ++_previousTargetID;
   FSTListenSequenceNumber listenSequenceNumber = [self nextSequenceNumber];
-  FSTQuery *query = FSTTestQuery([NSString stringWithFormat:@"path%i", targetID]);
+  FSTQuery *query = FSTTestQuery(absl::StrCat("path", targetID));
   return [[FSTQueryData alloc] initWithQuery:query
                                     targetID:targetID
                         listenSequenceNumber:listenSequenceNumber
@@ -294,7 +297,7 @@ NS_ASSUME_NONNULL_BEGIN
   id<FSTQueryCache> queryCache = [persistence queryCache];
   [queryCache start];
   id<FSTRemoteDocumentCache> documentCache = [persistence remoteDocumentCache];
-  FSTUser *user = [[FSTUser alloc] initWithUID:@"user"];
+  User user("user");
   id<FSTMutationQueue> mutationQueue = [persistence mutationQueueForUser:user];
   FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
   FSTWriteGroup *group = [persistence startGroupWithAction:@"Setup"];
@@ -353,7 +356,7 @@ NS_ASSUME_NONNULL_BEGIN
     [toBeRetained addObject:doc1.key];
   }
 
-  FSTTimestamp *writeTime = [FSTTimestamp timestamp];
+  FIRTimestamp *writeTime = [FIRTimestamp timestamp];
   [mutationQueue addMutationBatchWithWriteTime:writeTime mutations:mutations group:group];
 
 
@@ -411,7 +414,7 @@ NS_ASSUME_NONNULL_BEGIN
   // Documents from newest target are gone, except
 
   id<FSTPersistence> persistence = [self newPersistence];
-  FSTUser *user = [[FSTUser alloc] initWithUID:@"user"];
+  User user("user");
   id<FSTMutationQueue> mutationQueue = [persistence mutationQueueForUser:user];
   id<FSTQueryCache> queryCache = [persistence queryCache];
   id<FSTRemoteDocumentCache> documentCache = [persistence remoteDocumentCache];
