@@ -19,6 +19,7 @@
 #include <leveldb/db.h>
 
 #import "FIRFirestoreErrors.h"
+#import "Firestore/Source/Local/FSTLevelDBKey.h"
 #import "Firestore/Source/Local/FSTLevelDBMigrations.h"
 #import "Firestore/Source/Local/FSTLevelDBMutationQueue.h"
 #import "Firestore/Source/Local/FSTLevelDBQueryCache.h"
@@ -45,6 +46,7 @@ static NSString *const kReservedPathComponent = @"firestore";
 
 using leveldb::DB;
 using leveldb::Options;
+using leveldb::Range;
 using leveldb::ReadOptions;
 using leveldb::Status;
 using leveldb::WriteOptions;
@@ -232,6 +234,15 @@ using leveldb::WriteOptions;
   FSTAssert(self.isStarted, @"FSTLevelDB shutdown without start!");
   self.started = NO;
   _ptr.reset();
+}
+
+#pragma mark - Size
+
+- (long)byteSize {
+  Range range("", [FSTLevelDBKey maxKey]);
+  uint64_t size;
+  _ptr->GetApproximateSizes(&range, 1, &size);
+  return (long) size;
 }
 
 #pragma mark - Error and Status

@@ -144,8 +144,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (FSTDocumentKeySet *)matchingKeysForTargetID:(FSTTargetID)targetID;
 
-- (long)byteSize;
-
 @end
 
 NS_ASSUME_NONNULL_END

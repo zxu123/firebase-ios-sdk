@@ -18,6 +18,7 @@
 
 #include "Firestore/core/src/firebase/firestore/model/resource_path.h"
 #import "Firestore/Source/Core/FSTQuery.h"
+#import "Firestore/Source/Local/FSTMemoryPersistence.h"
 #import "Firestore/Source/Local/FSTMutationQueue.h"
 #import "Firestore/Source/Local/FSTQueryCache.h"
 #import "Firestore/Source/Model/FSTDocument.h"
@@ -104,21 +105,12 @@ NS_ASSUME_NONNULL_BEGIN
   return count;
 }
 
-// This size calculation is specific to estimating in-memory size of paths.
-// It should not be used for e.g. index entry sizing.
-size_t PathSize(const ResourcePath& path) {
-  size_t result = 0;
-  for (auto it = path.begin(); it != path.end(); it++) {
-    result += it->size();
-  }
-  return result;
-}
-
 - (long)byteSize {
   __block long result = 0;
   [self.docs enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, FSTMaybeDocument *value, BOOL *stop) {
-    // multiply by 2 because the document contains the same key as well.
-    result += 2 * PathSize(key.path);
+    result += [FSTMemoryPersistence pathSizeInMemory:key.path];
+    result += [FSTMemoryPersistence docSizeInMemory:value];
+    // TODO(gsoltis): document sizing? do we care?
   }];
   return result;
 }

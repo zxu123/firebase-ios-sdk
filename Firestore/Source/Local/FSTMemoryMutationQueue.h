@@ -26,6 +26,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (instancetype)mutationQueue;
 
+- (long)byteSize;
+
 /** The garbage collector to notify about potential garbage keys. */
 @property(nonatomic, weak, readwrite, nullable) id<FSTGarbageCollector> garbageCollector;
 

@@ -17,6 +17,9 @@
 #import <Foundation/Foundation.h>
 
 #import "Firestore/Source/Local/FSTPersistence.h"
+#include "Firestore/core/src/firebase/firestore/model/resource_path.h"
+
+@class FSTMaybeDocument;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -27,6 +30,12 @@ NS_ASSUME_NONNULL_BEGIN
 @interface FSTMemoryPersistence : NSObject <FSTPersistence>
 
 + (instancetype)persistence;
+
++ (size_t)docSizeInMemory:(FSTMaybeDocument *)doc;
+
+// This size calculation is specific to estimating in-memory size of paths.
+// It should not be used for e.g. index entry sizing.
++ (size_t)pathSizeInMemory:(const firebase::firestore::model::ResourcePath&)path;
 
 @end
 

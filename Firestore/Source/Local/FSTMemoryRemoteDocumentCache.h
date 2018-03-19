@@ -24,6 +24,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
 
+- (long)byteSize;
+
 @end
 
 NS_ASSUME_NONNULL_END

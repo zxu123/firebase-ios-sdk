@@ -26,9 +26,13 @@
 #import "Firestore/Source/Util/FSTAssert.h"
 
 #include "Firestore/core/src/firebase/firestore/auth/user.h"
+#include "Firestore/core/src/firebase/firestore/model/resource_path.h"
+#import "FSTDocument.h"
+#import "FSTFieldValue.h"
 
 using firebase::firestore::auth::HashUser;
 using firebase::firestore::auth::User;
+using firebase::firestore::model::ResourcePath;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -51,11 +55,59 @@ NS_ASSUME_NONNULL_BEGIN
   /** The FSTRemoteDocumentCache representing the persisted cache of remote documents. */
   FSTMemoryRemoteDocumentCache *_remoteDocumentCache;
 
-  std::unordered_map<User, id<FSTMutationQueue>, HashUser> _mutationQueues;
+  std::unordered_map<User, FSTMemoryMutationQueue*, HashUser> _mutationQueues;
 }
 
 + (instancetype)persistence {
   return [[FSTMemoryPersistence alloc] init];
+}
+
++ (size_t)valueSizeInMemory:(FSTFieldValue *)fieldValue {
+  Class fieldClass = [fieldValue class];
+  if (fieldClass == [FSTNullValue class]) {
+    return 0;
+  } else if (fieldClass == [FSTBooleanValue class]) {
+    return sizeof(bool);
+  } else if (fieldClass == [FSTIntegerValue class]) {
+    return sizeof(int64_t);
+  } else if (fieldClass == [FSTDoubleValue class]) {
+    return sizeof(double);
+  } else if (fieldClass == [FSTStringValue class]) {
+    return [fieldValue.value length];
+  } else if (fieldClass == [FSTTimestampValue class]) {
+    return malloc_size((__bridge const void*)FIRTimestamp);
+  } else if (fieldClass == [FSTGeoPointValue class]) {
+
+  } else if (fieldClass == [FSTBlobValue class]) {
+    fieldValue.value
+  }
+  return 0;
+}
+
++ (size_t)objectValueSizeInMemory:(FSTObjectValue *)object {
+  __block size_t result = 0;
+  [object.internalValue enumerateKeysAndObjectsUsingBlock:^(NSString *key, FSTFieldValue *value, BOOL *stop) {
+    result += key.length;
+    result += [FSTMemoryPersistence valueSizeInMemory:value];
+  }];
+  return result;
+}
+
++ (size_t)docSizeInMemory:(FSTMaybeDocument *)doc {
+  size_t result = [FSTMemoryPersistence pathSizeInMemory:doc.key.path()];
+  if ([doc isKindOfClass:[FSTDocument class]]) {
+    FSTObjectValue *value = ((FSTDocument *)doc).data;
+    result += [FSTMemoryPersistence objectValueSizeInMemory:value];
+  }
+  return result;
+}
+
++ (size_t)pathSizeInMemory:(const ResourcePath &)path {
+  size_t result = 0;
+  for (auto it = path.begin(); it != path.end(); it++) {
+    result += it->size();
+  }
+  return result;
 }
 
 - (instancetype)init {
@@ -107,9 +159,13 @@ NS_ASSUME_NONNULL_BEGIN
   FSTAssert(group.isEmpty, @"Memory persistence shouldn't use write groups: %@", group.action);
 }
 
-/*- (long)byteSize {
+- (long)byteSize {
   long bytes = [_queryCache byteSize] + [_remoteDocumentCache byteSize];
-}*/
+  for (auto it = _mutationQueues.begin(); it != _mutationQueues.end(); ++it) {
+    bytes += [it->second byteSize];
+  }
+  return bytes;
+}
 
 @end
 

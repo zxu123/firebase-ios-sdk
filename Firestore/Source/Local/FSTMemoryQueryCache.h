@@ -25,6 +25,9 @@ NS_ASSUME_NONNULL_BEGIN
  * for online only clients with persistence disabled.
  */
 @interface FSTMemoryQueryCache : NSObject <FSTQueryCache>
+
+- (long)byteSize;
+
 @end
 
 NS_ASSUME_NONNULL_END

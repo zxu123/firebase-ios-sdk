@@ -77,6 +77,8 @@ NS_ASSUME_NONNULL_BEGIN
  */
 + (NSString *)descriptionForKey:(Firestore::StringView)key;
 
++ (leveldb::Slice)maxKey;
+
 @end
 
 /** A key to a singleton row storing the version of the schema. */

@@ -337,14 +337,8 @@ static std::string DocTargetKey(NSString *key, FSTTargetID targetID) {
 }
 
 - (void)testRemoteDocumentKeyOrdering {
-  std::string prefix = [FSTLevelDBRemoteDocumentKey keyPrefix];
-  std::string maxKey = [FSTLevelDBRemoteDocumentKey maxKey];
-  FSTAssertKeyLessThan(prefix, RemoteDocKey(@"foo/bar"));
   FSTAssertKeyLessThan(RemoteDocKey(@"foo/bar"), RemoteDocKey(@"foo/bar2"));
   FSTAssertKeyLessThan(RemoteDocKey(@"foo/bar"), RemoteDocKey(@"foo/bar/suffix/key"));
-  std::string thing = RemoteDocKey(@"foo/bar/suffix/key");
-  NSLog(@"cmp: %s", thing.c_str());
-  FSTAssertKeyLessThan(RemoteDocKey(@"foo/bar/suffix/key"), maxKey);
 }
 
 - (void)testRemoteDocumentKeyEncodeDecodeCycle {

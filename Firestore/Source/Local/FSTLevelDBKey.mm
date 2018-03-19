@@ -314,6 +314,10 @@ inline void WriteTerminator(std::string *dest) {
   OrderedCode::WriteSignedNumIncreasing(dest, FSTComponentLabelTerminator);
 }
 
+inline void WriteMaxLabel(std::string *dest) {
+  OrderedCode::WriteSignedNumIncreasing(dest, FSTComponentLabelUnknown);
+}
+
 inline BOOL ReadTerminator(Slice *contents) {
   absl::string_view tmp(contents->data(), contents->size());
   BOOL result = ReadComponentLabelMatching(&tmp, FSTComponentLabelTerminator);
@@ -453,6 +457,15 @@ NSString *InvalidKey(const Slice &key) {
 
   [description appendString:@"]"];
   return description;
+}
+
++ (Slice)maxKey {
+  static const Slice maxKey = [](){
+    std::string dest;
+    OrderedCode::WriteSignedNumIncreasing(&dest, FSTComponentLabelUnknown);
+    return dest;
+  }();
+  return maxKey;
 }
 
 @end
@@ -775,6 +788,8 @@ static const FSTTargetID kInvalidTargetID = 0;
 + (std::string)maxKey {
   std::string result;
   WriteTableName(&result, kRemoteDocumentsTable);
+  WriteMaxLabel(&result);
+  return result;
   // TODO: write something that makes this work
 }
 

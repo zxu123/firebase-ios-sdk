@@ -178,13 +178,6 @@ static ReadOptions StandardReadOptions() {
   return count;
 }
 
-- (long)byteSize {
-  Range range([FSTLevelDBRemoteDocumentKey keyPrefix], [FSTLevelDBRemoteDocumentKey maxKey]);
-  uint64_t size;
-  _db->GetApproximateSizes(&range, 1, &size);
-  return (long)size;
-}
-
 @end
 
 NS_ASSUME_NONNULL_END

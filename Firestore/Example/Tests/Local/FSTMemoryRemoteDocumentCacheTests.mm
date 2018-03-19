@@ -16,10 +16,13 @@
 
 #import "Firestore/Source/Local/FSTMemoryRemoteDocumentCache.h"
 
+#import "Firestore/Source/Model/FSTDocument.h"
+#import "Firestore/Source/Model/FSTFieldValue.h"
 #import "Firestore/Source/Local/FSTMemoryPersistence.h"
 
 #import "Firestore/Example/Tests/Local/FSTPersistenceTestHelpers.h"
 #import "Firestore/Example/Tests/Local/FSTRemoteDocumentCacheTests.h"
+#import "Firestore/Example/Tests/Util/FSTHelpers.h"
 
 @interface FSTMemoryRemoteDocumentCacheTests : FSTRemoteDocumentCacheTests
 @end
@@ -44,6 +47,18 @@
   self.remoteDocumentCache = nil;
 
   [super tearDown];
+}
+
+- (void)testByteSize {
+  FSTWriteGroup *group = [self.persistence startGroupWithAction:@"Setup"];
+  FSTDocument *doc = FSTTestDoc("a/b", 1, @{
+          @"key1": @1
+  }, NO);
+  [self.remoteDocumentCache addEntry:doc group:group];
+  [self.persistence commitGroup:group];
+
+  long bytes = [(FSTMemoryRemoteDocumentCache *)self.remoteDocumentCache byteSize];
+  NSLog(@"bytes? %i", bytes);
 }
 
 @end
