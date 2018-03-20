@@ -19,6 +19,7 @@
 #import "Firestore/Source/Core/FSTQuery.h"
 #import "Firestore/Source/Local/FSTDocumentReference.h"
 #import "Firestore/Source/Model/FSTDocumentKey.h"
+#import "Firestore/Source/Local/FSTMemoryPersistence.h"
 #import "Firestore/Source/Model/FSTMutation.h"
 #import "Firestore/Source/Model/FSTMutationBatch.h"
 #import "Firestore/Source/Util/FSTAssert.h"
@@ -32,6 +33,9 @@ NS_ASSUME_NONNULL_BEGIN
 static const NSComparator NumberComparator = ^NSComparisonResult(NSNumber *left, NSNumber *right) {
   return [left compare:right];
 };
+
+// Use the size of a timestamp as an estimate for the size of a single transform in memory.
+static const int32_t kTransformSizeEstimate = sizeof(int64_t) + sizeof(int32_t);
 
 @interface FSTMemoryMutationQueue ()
 
@@ -369,6 +373,28 @@ static const NSComparator NumberComparator = ^NSComparisonResult(NSNumber *left,
     FSTAssert([self.batchesByDocumentKey isEmpty],
               @"Document leak -- detected dangling mutation references when queue is empty.");
   }
+}
+
+#pragma mark - Sizing
+
+- (long)byteSize {
+  __block long result = 0;
+  [self.queue enumerateObjectsUsingBlock:^(FSTMutationBatch *batch, NSUInteger idx, BOOL *stop) {
+    for (FSTMutation *mutation in batch.mutations) {
+      result += [FSTMemoryPersistence pathSizeInMemory:mutation.key.path()];
+      Class mutationClass = [mutation class];
+      if (mutationClass == [FSTSetMutation class]) {
+        result += [FSTMemoryPersistence objectValueSizeInMemory:((FSTSetMutation *)mutation).value];
+      } else if (mutationClass == [FSTPatchMutation class]) {
+        result += [FSTMemoryPersistence objectValueSizeInMemory:((FSTPatchMutation *)mutation).value];
+      } else if (mutationClass == [FSTTransformMutation class]) {
+        result += kTransformSizeEstimate * ((FSTTransformMutation *)mutation).fieldTransforms.count;
+      } else {
+        // deletion, no extra size
+      }
+    }
+  }];
+  return result;
 }
 
 #pragma mark - FSTGarbageSource implementation

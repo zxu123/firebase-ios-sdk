@@ -26,12 +26,14 @@
 #import "Firestore/Source/Util/FSTAssert.h"
 
 #include "Firestore/core/src/firebase/firestore/auth/user.h"
+#include "Firestore/core/src/firebase/firestore/model/database_id.h"
 #include "Firestore/core/src/firebase/firestore/model/resource_path.h"
 #import "FSTDocument.h"
 #import "FSTFieldValue.h"
 
 using firebase::firestore::auth::HashUser;
 using firebase::firestore::auth::User;
+using firebase::firestore::model::DatabaseId;
 using firebase::firestore::model::ResourcePath;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -75,13 +77,24 @@ NS_ASSUME_NONNULL_BEGIN
   } else if (fieldClass == [FSTStringValue class]) {
     return [fieldValue.value length];
   } else if (fieldClass == [FSTTimestampValue class]) {
-    return malloc_size((__bridge const void*)FIRTimestamp);
+    return sizeof(int64_t) + sizeof(int32_t);
   } else if (fieldClass == [FSTGeoPointValue class]) {
-
+    return 2 * sizeof(double);
   } else if (fieldClass == [FSTBlobValue class]) {
-    fieldValue.value
+    return ((NSData *)fieldValue.value).length;
+  } else if (fieldClass == [FSTReferenceValue class]) {
+    return sizeof(DatabaseId) + [FSTMemoryPersistence pathSizeInMemory:((FSTDocumentKey *)fieldValue.value).path];
+  } else if (fieldClass == [FSTObjectValue class]) {
+    return [FSTMemoryPersistence objectValueSizeInMemory:(FSTObjectValue *)fieldValue];
+  } else if (fieldClass == [FSTArrayValue class]) {
+    size_t result = 0;
+    NSArray<FSTFieldValue *> *elems = (NSArray<FSTFieldValue *> *)fieldValue.value;
+    for (FSTFieldValue *elem in elems) {
+      result += [FSTMemoryPersistence valueSizeInMemory:elem];
+    }
+    return result;
   }
-  return 0;
+  FSTFail(@"Unknown FieldValue type: %@", fieldClass);
 }
 
 + (size_t)objectValueSizeInMemory:(FSTObjectValue *)object {

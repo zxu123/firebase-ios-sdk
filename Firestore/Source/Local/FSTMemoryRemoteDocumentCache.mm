@@ -110,7 +110,6 @@ NS_ASSUME_NONNULL_BEGIN
   [self.docs enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, FSTMaybeDocument *value, BOOL *stop) {
     result += [FSTMemoryPersistence pathSizeInMemory:key.path];
     result += [FSTMemoryPersistence docSizeInMemory:value];
-    // TODO(gsoltis): document sizing? do we care?
   }];
   return result;
 }

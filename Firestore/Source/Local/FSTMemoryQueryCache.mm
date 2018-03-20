@@ -21,6 +21,7 @@
 #import "Firestore/Source/Local/FSTQueryData.h"
 #import "Firestore/Source/Local/FSTReferenceSet.h"
 #import "Firestore/Source/Model/FSTDocumentKey.h"
+#import "FSTMemoryPersistence.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -202,6 +203,24 @@ NS_ASSUME_NONNULL_BEGIN
   } else {
     return NO;
   }
+}
+
+#pragma mark - Sizing
+
+- (long)byteSize {
+  __block long result = 0;
+  [self.orphanedDocumentSequenceNumbers enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, NSNumber *obj, BOOL *stop) {
+    result += [FSTMemoryPersistence pathSizeInMemory:key.path];
+    result += sizeof(int64_t); // account for the number
+  }];
+  [self.queries enumerateKeysAndObjectsUsingBlock:^(FSTQuery *query, FSTQueryData *queryData, BOOL *stop) {
+    // The queryData also includes the query, so we can use that calculation twice.
+    result += 2 * query.canonicalID.length;
+    result += queryData.resumeToken.length;
+    // Technically we are ignoring a small amount of QueryData overhead, we are just
+    // capturing the dynamic elements.
+  }];
+  return result;
 }
 
 #pragma mark - FSTGarbageSource implementation

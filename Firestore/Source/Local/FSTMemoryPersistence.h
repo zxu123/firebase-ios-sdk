@@ -20,6 +20,7 @@
 #include "Firestore/core/src/firebase/firestore/model/resource_path.h"
 
 @class FSTMaybeDocument;
+@class FSTObjectValue;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -30,6 +31,8 @@ NS_ASSUME_NONNULL_BEGIN
 @interface FSTMemoryPersistence : NSObject <FSTPersistence>
 
 + (instancetype)persistence;
+
++ (size_t)objectValueSizeInMemory:(FSTObjectValue *)object;
 
 + (size_t)docSizeInMemory:(FSTMaybeDocument *)doc;
 
