@@ -13,7 +13,7 @@ struct FSTLRUThreshold {
     long min_ms_since_start;
     long max_bytes_stored;
     long min_ms_between_attempts;
-
+    NSUInteger percentile_to_gc;
 };
 
 @interface FSTLRUGarbageCollector : NSObject

@@ -5,6 +5,7 @@
 #import "Firestore/Source/Local/FSTMutationQueue.h"
 #import "Firestore/Source/Local/FSTPersistence.h"
 #import "Firestore/Source/Local/FSTQueryCache.h"
+#import "Firestore/Source/Util/FSTLogger.h"
 
 const FSTListenSequenceNumber kFSTListenSequenceNumberInvalid = -1;
 
@@ -64,8 +65,8 @@ class RollingSequenceNumberBuffer {
   return self;
 }
 
-- (BOOL)shouldGC:(long)ms_since_start now:(long)now persistence:(id<FSTPersistence>)persistence {
-  if (ms_since_start < _threshold.min_ms_since_start) {
+- (BOOL)shouldGC:(long)msSinceStart now:(long)now persistence:(id<FSTPersistence>)persistence {
+  if (msSinceStart < _threshold.min_ms_since_start) {
     return NO;
   }
 
@@ -122,6 +123,35 @@ class RollingSequenceNumberBuffer {
                                 throughSequenceNumber:sequenceNumber
                                         mutationQueue:mutationQueue
                                                 group:group];
+}
+
+- (void)collectGarbageWithLiveQueries:(NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries
+                        documentCache:(id<FSTRemoteDocumentCache>)docCache
+                        mutationQueue:(id<FSTMutationQueue>)mutationQueue
+                                group:(FSTWriteGroup *)group {
+  NSDate *startTime = [NSDate date];
+  NSUInteger queryCount = [self queryCountForPercentile:_threshold.percentile_to_gc];
+  FSTListenSequenceNumber sequenceNumber = [self sequenceNumberForQueryCount:queryCount];
+  NSDate *boundaryTime = [NSDate date];
+  NSUInteger queriesRemoved = [self removeQueriesUpThroughSequenceNumber:sequenceNumber
+                                                             liveQueries:liveQueries
+                                                                   group:group];
+  NSDate *queryRemovalTime = [NSDate date];
+  NSUInteger documentsRemoved = [self removeOrphanedDocuments:docCache
+                                        throughSequenceNumber:sequenceNumber
+                                                mutationQueue:mutationQueue
+                                                        group:group];
+  NSDate *endTime = [NSDate date];
+  int totalMs = (int)([endTime timeIntervalSinceDate:startTime] * 1000);
+  int boundaryMs = (int)([boundaryTime timeIntervalSinceDate:startTime] * 1000);
+  int queriesRemovedMs = (int)([queryRemovalTime timeIntervalSinceDate:boundaryTime] * 1000);
+  int documentsRemovedMs = (int)([endTime timeIntervalSinceDate:queryRemovalTime] * 1000);
+  NSMutableString *report = [NSMutableString string];
+  [report appendFormat:@"Garbage collection finished in %ims", totalMs];
+  [report appendFormat:@"\n - Identified %i%% sequence number in %ims", _threshold.percentile_to_gc, boundaryMs];
+  [report appendFormat:@"\n - %i targets removed in %ims", queriesRemoved, queriesRemovedMs];
+  [report appendFormat:@"\n - %i documents removed in %ims", documentsRemoved, documentsRemovedMs];
+  FSTLog(report);
 }
 
 @end
