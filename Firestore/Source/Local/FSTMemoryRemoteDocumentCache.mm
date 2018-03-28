@@ -89,8 +89,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (NSUInteger)removeOrphanedDocuments:(id<FSTQueryCache>)queryCache
                 throughSequenceNumber:(FSTListenSequenceNumber)upperBound
-                        mutationQueue:(id<FSTMutationQueue>)mutationQueue
-                                group:(FSTWriteGroup *)group {
+                        mutationQueue:(id<FSTMutationQueue>)mutationQueue {
   NSUInteger count = 0;
   FSTMaybeDocumentDictionary *updatedDocs = self.docs;
   for (FSTDocumentKey *docKey in [self.docs keyEnumerator]) {
@@ -98,7 +97,7 @@ NS_ASSUME_NONNULL_BEGIN
       continue;
     }
     // TODO(gsoltis): the following line needs a sequence number guard
-    if ([queryCache removeOrphanedDocument:docKey upperBound:upperBound group:group]) {
+    if ([queryCache removeOrphanedDocument:docKey upperBound:upperBound]) {
       updatedDocs = [updatedDocs dictionaryByRemovingObjectForKey:docKey];
       NSLog(@"Removing %@", docKey);
       count++;

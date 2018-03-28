@@ -85,6 +85,8 @@ struct FSTTransactionRunner;
 /** Creates an FSTRemoteDocumentCache representing the persisted cache of remote documents. */
 - (id<FSTRemoteDocumentCache>)remoteDocumentCache;
 
+- (long)byteSize;
+
 @property(nonatomic, readonly, assign) const FSTTransactionRunner &run;
 
 @end
@@ -94,8 +96,6 @@ struct FSTTransactionRunner;
 - (void)startTransaction:(const std::string &)label;
 
 - (void)commitTransaction;
-
-- (long)byteSize;
 
 @end
 

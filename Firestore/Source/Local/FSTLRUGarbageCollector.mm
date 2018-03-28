@@ -108,39 +108,32 @@ class RollingSequenceNumberBuffer {
 
 - (NSUInteger)removeQueriesUpThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
                                        liveQueries:
-                                           (NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries
-                                             group:(FSTWriteGroup *)group {
+                                           (NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries {
   return [self.queryCache removeQueriesThroughSequenceNumber:sequenceNumber
-                                                 liveQueries:liveQueries
-                                                       group:group];
+                                                 liveQueries:liveQueries];
 }
 
 - (NSUInteger)removeOrphanedDocuments:(id<FSTRemoteDocumentCache>)remoteDocumentCache
                 throughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
-                        mutationQueue:(id<FSTMutationQueue>)mutationQueue
-                                group:(FSTWriteGroup *)group {
+                        mutationQueue:(id<FSTMutationQueue>)mutationQueue {
   return [remoteDocumentCache removeOrphanedDocuments:self.queryCache
                                 throughSequenceNumber:sequenceNumber
-                                        mutationQueue:mutationQueue
-                                                group:group];
+                                        mutationQueue:mutationQueue];
 }
 
 - (void)collectGarbageWithLiveQueries:(NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries
                         documentCache:(id<FSTRemoteDocumentCache>)docCache
-                        mutationQueue:(id<FSTMutationQueue>)mutationQueue
-                                group:(FSTWriteGroup *)group {
+                        mutationQueue:(id<FSTMutationQueue>)mutationQueue {
   NSDate *startTime = [NSDate date];
   NSUInteger queryCount = [self queryCountForPercentile:_threshold.percentile_to_gc];
   FSTListenSequenceNumber sequenceNumber = [self sequenceNumberForQueryCount:queryCount];
   NSDate *boundaryTime = [NSDate date];
   NSUInteger queriesRemoved = [self removeQueriesUpThroughSequenceNumber:sequenceNumber
-                                                             liveQueries:liveQueries
-                                                                   group:group];
+                                                             liveQueries:liveQueries];
   NSDate *queryRemovalTime = [NSDate date];
   NSUInteger documentsRemoved = [self removeOrphanedDocuments:docCache
                                         throughSequenceNumber:sequenceNumber
-                                                mutationQueue:mutationQueue
-                                                        group:group];
+                                                mutationQueue:mutationQueue];
   NSDate *endTime = [NSDate date];
   int totalMs = (int)([endTime timeIntervalSinceDate:startTime] * 1000);
   int boundaryMs = (int)([boundaryTime timeIntervalSinceDate:startTime] * 1000);
@@ -151,7 +144,7 @@ class RollingSequenceNumberBuffer {
   [report appendFormat:@"\n - Identified %i%% sequence number in %ims", _threshold.percentile_to_gc, boundaryMs];
   [report appendFormat:@"\n - %i targets removed in %ims", queriesRemoved, queriesRemovedMs];
   [report appendFormat:@"\n - %i documents removed in %ims", documentsRemoved, documentsRemovedMs];
-  FSTLog(report);
+  FSTLog(@"%@", report);
 }
 
 @end

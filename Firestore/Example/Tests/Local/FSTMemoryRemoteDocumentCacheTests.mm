@@ -50,19 +50,19 @@
 }
 
 - (void)testByteSize {
-  FSTWriteGroup *group = [self.persistence startGroupWithAction:@"Setup"];
-  FSTDocument *doc = FSTTestDoc("a/b", 1, @{
-          @"key1": @1,  // 4 bytes + 8 bytes
-          @"key2": @{   // 4 bytes
-                  @"isBool": @YES,  // 6 bytes + 1 byte
-                  @"isString": @"also yes"  // 8 bytes + 8 bytes
-          }
-  }, NO);
-  [self.remoteDocumentCache addEntry:doc group:group];
-  [self.persistence commitGroup:group];
+  self.persistence.run("testByteSize", [&]() {
+    FSTDocument *doc = FSTTestDoc("a/b", 1, @{
+            @"key1": @1,  // 4 bytes + 8 bytes
+            @"key2": @{   // 4 bytes
+                    @"isBool": @YES,  // 6 bytes + 1 byte
+                    @"isString": @"also yes"  // 8 bytes + 8 bytes
+            }
+    }, NO);
+    [self.remoteDocumentCache addEntry:doc];
 
-  long bytes = [(FSTMemoryRemoteDocumentCache *)self.remoteDocumentCache byteSize];
-  NSLog(@"bytes? %li", bytes);
+    long bytes = [(FSTMemoryRemoteDocumentCache *)self.remoteDocumentCache byteSize];
+    NSLog(@"bytes? %li", bytes);
+  });
 }
 
 @end

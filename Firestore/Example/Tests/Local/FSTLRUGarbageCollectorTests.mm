@@ -19,7 +19,7 @@
 #import <XCTest/XCTest.h>
 #import <absl/strings/str_cat.h>
 
-#import "Firestore/Source/API/FIRTimestamp+Internal.h"
+#import "Firestore/Source/Public/FIRTimestamp.h"
 
 #include "Firestore/core/src/firebase/firestore/auth/user.h"
 #import "Firestore/Source/Local/FSTLRUGarbageCollector.h"
@@ -106,18 +106,19 @@ NS_ASSUME_NONNULL_BEGIN
     int numQueries = testCases[i].queries;
     int expectedTenthPercentile = testCases[i].expected;
     id<FSTPersistence> persistence = [self newPersistence];
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"Setup"];
-    id<FSTQueryCache> queryCache = [persistence queryCache];
-    [queryCache start];
-    for (int j = 0; j < numQueries; j++) {
-      [queryCache addQueryData:[self nextTestQuery] group:group];
-    }
-    [persistence commitGroup:group];
+    persistence.run("testPickSequenceNumberPercentile" + std::to_string(i), [&]() {
+      id<FSTQueryCache> queryCache = [persistence queryCache];
+      [queryCache start];
+      for (int j = 0; j < numQueries; j++) {
+        [queryCache addQueryData:[self nextTestQuery]];
+      }
 
-    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
-    FSTListenSequenceNumber tenth = [gc queryCountForPercentile:10];
-    XCTAssertEqual(expectedTenthPercentile, tenth, @"Total query count: %i", numQueries);
-    [queryCache shutdown];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      FSTListenSequenceNumber tenth = [gc queryCountForPercentile:10];
+      XCTAssertEqual(expectedTenthPercentile, tenth, @"Total query count: %i", numQueries);
+    });
+
+    // TODO(gsoltis): technically should shutdown query cache, but it doesn't do anything anymore.
     [persistence shutdown];
   }
 }
@@ -130,12 +131,13 @@ NS_ASSUME_NONNULL_BEGIN
   // No queries... should get invalid sequence number (-1)
   {
     id<FSTPersistence> persistence = [self newPersistence];
-    id<FSTQueryCache> queryCache = [persistence queryCache];
-    [queryCache start];
-    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
-    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:0];
-    XCTAssertEqual(kFSTListenSequenceNumberInvalid, highestToCollect);
-    [queryCache shutdown];
+    persistence.run("no queries", [&]() {
+      id<FSTQueryCache> queryCache = [persistence queryCache];
+      [queryCache start];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:0];
+      XCTAssertEqual(kFSTListenSequenceNumberInvalid, highestToCollect);
+    });
     [persistence shutdown];
   }
 
@@ -143,17 +145,16 @@ NS_ASSUME_NONNULL_BEGIN
   {
     _previousSequenceNumber = 1000;
     id<FSTPersistence> persistence = [self newPersistence];
-    id<FSTQueryCache> queryCache = [persistence queryCache];
-    [queryCache start];
-    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"Setup"];
-    for (int i = 0; i < 50; i++) {
-      [queryCache addQueryData:[self nextTestQuery] group:group];
-    }
-    [persistence commitGroup:group];
-    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
-    XCTAssertEqual(1010, highestToCollect);
-    [queryCache shutdown];
+    persistence.run("50 queries, want 10. Should get 1010.", [&]() {
+      id <FSTQueryCache> queryCache = [persistence queryCache];
+      [queryCache start];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      for (int i = 0; i < 50; i++) {
+        [queryCache addQueryData:[self nextTestQuery]];
+      }
+      FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
+      XCTAssertEqual(1010, highestToCollect);
+    });
     [persistence shutdown];
   }
 
@@ -161,22 +162,21 @@ NS_ASSUME_NONNULL_BEGIN
   {
     _previousSequenceNumber = 1000;
     id<FSTPersistence> persistence = [self newPersistence];
-    id<FSTQueryCache> queryCache = [persistence queryCache];
-    [queryCache start];
-    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"Setup"];
-    for (int i = 0; i < 9; i++) {
-      [queryCache addQueryData:[self nextTestQuery] group:group];
-      _previousSequenceNumber = 1000;
-    }
-    _previousSequenceNumber = 1001;
-    for (int i = 9; i < 50; i++) {
-      [queryCache addQueryData:[self nextTestQuery] group:group];
-    }
-    [persistence commitGroup:group];
-    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
-    XCTAssertEqual(1002, highestToCollect);
-    [queryCache shutdown];
+    persistence.run("50 queries, 9 with 1001, incrementing from there. Should get 1002.", [&]() {
+      id <FSTQueryCache> queryCache = [persistence queryCache];
+      [queryCache start];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      for (int i = 0; i < 9; i++) {
+        [queryCache addQueryData:[self nextTestQuery]];
+        _previousSequenceNumber = 1000;
+      }
+      _previousSequenceNumber = 1001;
+      for (int i = 9; i < 50; i++) {
+        [queryCache addQueryData:[self nextTestQuery]];
+      }
+      FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
+      XCTAssertEqual(1002, highestToCollect);
+    });
     [persistence shutdown];
   }
 
@@ -184,22 +184,21 @@ NS_ASSUME_NONNULL_BEGIN
   {
     _previousSequenceNumber = 1000;
     id<FSTPersistence> persistence = [self newPersistence];
-    id<FSTQueryCache> queryCache = [persistence queryCache];
-    [queryCache start];
-    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"Setup"];
-    for (int i = 0; i < 11; i++) {
-      [queryCache addQueryData:[self nextTestQuery] group:group];
-      _previousSequenceNumber = 1000;
-    }
-    _previousSequenceNumber = 1001;
-    for (int i = 11; i < 50; i++) {
-      [queryCache addQueryData:[self nextTestQuery] group:group];
-    }
-    [persistence commitGroup:group];
-    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
-    XCTAssertEqual(1001, highestToCollect);
-    [queryCache shutdown];
+    persistence.run("50 queries, 11 with 1001, incrementing from there. Should get 1001.", [&]() {
+      id <FSTQueryCache> queryCache = [persistence queryCache];
+      [queryCache start];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      for (int i = 0; i < 11; i++) {
+        [queryCache addQueryData:[self nextTestQuery]];
+        _previousSequenceNumber = 1000;
+      }
+      _previousSequenceNumber = 1001;
+      for (int i = 11; i < 50; i++) {
+        [queryCache addQueryData:[self nextTestQuery]];
+      }
+      FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
+      XCTAssertEqual(1001, highestToCollect);
+    });
     [persistence shutdown];
   }
 
@@ -207,20 +206,19 @@ NS_ASSUME_NONNULL_BEGIN
   {
     _previousSequenceNumber = 1000;
     id<FSTPersistence> persistence = [self newPersistence];
-    id<FSTQueryCache> queryCache = [persistence queryCache];
-    [queryCache start];
-    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"Setup"];
-    FSTDocumentKey *key = [self nextTestDocKey];
-    FSTDocumentKeySet *set = [[FSTDocumentKeySet keySet] setByAddingObject:key];
-    [queryCache addPotentiallyOrphanedDocuments:set atSequenceNumber:1000 group:group];
-    for (int i = 0; i < 50; i++) {
-      [queryCache addQueryData:[self nextTestQuery] group:group];
-    }
-    [persistence commitGroup:group];
-    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
-    XCTAssertEqual(1009, highestToCollect);
-    [queryCache shutdown];
+    persistence.run("A mutated doc at 1000, 50 queries 1001-1050. Should get 1009.", [&]() {
+      id <FSTQueryCache> queryCache = [persistence queryCache];
+      [queryCache start];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      FSTDocumentKey *key = [self nextTestDocKey];
+      FSTDocumentKeySet *set = [[FSTDocumentKeySet keySet] setByAddingObject:key];
+      [queryCache addPotentiallyOrphanedDocuments:set atSequenceNumber:1000];
+      for (int i = 0; i < 50; i++) {
+        [queryCache addQueryData:[self nextTestQuery]];
+      }
+      FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
+      XCTAssertEqual(1009, highestToCollect);
+    });
     [persistence shutdown];
   }
 
@@ -229,33 +227,31 @@ NS_ASSUME_NONNULL_BEGIN
   {
     _previousSequenceNumber = 1000;
     id<FSTPersistence> persistence = [self newPersistence];
-    id<FSTQueryCache> queryCache = [persistence queryCache];
-    [queryCache start];
-    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"Setup"];
-    FSTDocument *docInQuery = [self nextTestDocument];
-    FSTDocumentKeySet *set = [[FSTDocumentKeySet keySet] setByAddingObject:docInQuery.key];
-    FSTDocumentKeySet *docInQuerySet = set;
-    for (int i = 0; i < 8; i++) {
-      set = [set setByAddingObject:[self nextTestDocKey]];
-    }
-    // Adding 9 doc keys at 1000. If we remove one of them, we'll have room for two actual queries.
-    [queryCache addPotentiallyOrphanedDocuments:set atSequenceNumber:1000 group:group];
-    for (int i = 0; i < 49; i++) {
-      [queryCache addQueryData:[self nextTestQuery] group:group];
-    }
-    FSTQueryData *queryData = [self nextTestQuery];
-    [queryCache addQueryData:queryData group:group];
-    // This should bump one document out of the mutated documents cache.
-    [queryCache addMatchingKeys:docInQuerySet
-                    forTargetID:queryData.targetID
-               atSequenceNumber:queryData.sequenceNumber
-                          group:group];
-    [persistence commitGroup:group];
-    // This should catch the remaining 8 documents, plus the first two queries we added.
-    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
-    XCTAssertEqual(1002, highestToCollect);
-    [queryCache shutdown];
+    persistence.run("Add mutated docs, then add one of them to a query target so it doesn't get GC'd. Expect 1002", [&]() {
+      id <FSTQueryCache> queryCache = [persistence queryCache];
+      [queryCache start];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      FSTDocument *docInQuery = [self nextTestDocument];
+      FSTDocumentKeySet *set = [[FSTDocumentKeySet keySet] setByAddingObject:docInQuery.key];
+      FSTDocumentKeySet *docInQuerySet = set;
+      for (int i = 0; i < 8; i++) {
+        set = [set setByAddingObject:[self nextTestDocKey]];
+      }
+      // Adding 9 doc keys at 1000. If we remove one of them, we'll have room for two actual queries.
+      [queryCache addPotentiallyOrphanedDocuments:set atSequenceNumber:1000];
+      for (int i = 0; i < 49; i++) {
+        [queryCache addQueryData:[self nextTestQuery]];
+      }
+      FSTQueryData *queryData = [self nextTestQuery];
+      [queryCache addQueryData:queryData];
+      // This should bump one document out of the mutated documents cache.
+      [queryCache addMatchingKeys:docInQuerySet
+                      forTargetID:queryData.targetID
+                 atSequenceNumber:queryData.sequenceNumber];
+      // This should catch the remaining 8 documents, plus the first two queries we added.
+      FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
+      XCTAssertEqual(1002, highestToCollect);
+    });
     [persistence shutdown];
   }
 }
@@ -264,29 +260,26 @@ NS_ASSUME_NONNULL_BEGIN
   if ([self isTestBaseClass]) return;
 
   id<FSTPersistence> persistence = [self newPersistence];
-  id<FSTQueryCache> queryCache = [persistence queryCache];
-  [queryCache start];
-  FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
-  FSTWriteGroup *group = [persistence startGroupWithAction:@"Setup"];
-  NSMutableDictionary<NSNumber *, FSTQueryData *> *liveQueries = [[NSMutableDictionary alloc] init];
-  for (int i = 0; i < 100; i++) {
-    FSTQueryData *queryData = [self nextTestQuery];
-    // Mark odd queries as live so we can test filtering out live queries.
-    if (queryData.targetID % 2 == 1) {
-      liveQueries[@(queryData.targetID)] = queryData;
+  persistence.run("testRemoveQueriesUpThroughSequenceNumber", [&]() {
+    id<FSTQueryCache> queryCache = [persistence queryCache];
+    [queryCache start];
+    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+    NSMutableDictionary<NSNumber *, FSTQueryData *> *liveQueries = [[NSMutableDictionary alloc] init];
+    for (int i = 0; i < 100; i++) {
+      FSTQueryData *queryData = [self nextTestQuery];
+      // Mark odd queries as live so we can test filtering out live queries.
+      if (queryData.targetID % 2 == 1) {
+        liveQueries[@(queryData.targetID)] = queryData;
+      }
+      [queryCache addQueryData:queryData];
     }
-    [queryCache addQueryData:queryData group:group];
-  }
-  [persistence commitGroup:group];
 
-  // GC up through 1015, which is 15%.
-  // Expect to have GC'd 7 targets (even values of 1001-1015).
-  FSTWriteGroup *gcGroup = [persistence startGroupWithAction:@"gc"];
-  NSUInteger removed =
-      [gc removeQueriesUpThroughSequenceNumber:1015 liveQueries:liveQueries group:gcGroup];
-  [persistence commitGroup:gcGroup];
-  XCTAssertEqual(7, removed);
-  [queryCache shutdown];
+    // GC up through 1015, which is 15%.
+    // Expect to have GC'd 7 targets (even values of 1001-1015).
+    NSUInteger removed =
+            [gc removeQueriesUpThroughSequenceNumber:1015 liveQueries:liveQueries];
+    XCTAssertEqual(7, removed);
+  });
   [persistence shutdown];
 }
 
@@ -294,101 +287,98 @@ NS_ASSUME_NONNULL_BEGIN
   if ([self isTestBaseClass]) return;
 
   id<FSTPersistence> persistence = [self newPersistence];
-  id<FSTQueryCache> queryCache = [persistence queryCache];
-  [queryCache start];
-  id<FSTRemoteDocumentCache> documentCache = [persistence remoteDocumentCache];
-  User user("user");
-  id<FSTMutationQueue> mutationQueue = [persistence mutationQueueForUser:user];
-  FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
-  FSTWriteGroup *group = [persistence startGroupWithAction:@"Setup"];
-  [mutationQueue startWithGroup:group];
+  persistence.run("testRemoveOrphanedDocuments", [&]() {
+    id <FSTQueryCache> queryCache = [persistence queryCache];
+    [queryCache start];
+    id <FSTRemoteDocumentCache> documentCache = [persistence remoteDocumentCache];
+    User user("user");
+    id <FSTMutationQueue> mutationQueue = [persistence mutationQueueForUser:user];
+    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+    [mutationQueue start];
 
-  // Add docs to mutation queue, as well as keep some queries. verify that correct documents are
-  // removed.
-  NSMutableSet<FSTDocumentKey *> *toBeRetained = [NSMutableSet set];
+    // Add docs to mutation queue, as well as keep some queries. verify that correct documents are
+    // removed.
+    NSMutableSet<FSTDocumentKey *> *toBeRetained = [NSMutableSet set];
 
-  NSMutableArray *mutations = [NSMutableArray arrayWithCapacity:2];
-  // Add two documents to first target, and register a mutation on the second one
-  {
-    FSTQueryData *queryData = [self nextTestQuery];
-    [queryCache addQueryData:queryData group:group];
-    FSTDocumentKeySet *keySet = [FSTImmutableSortedSet keySet];
-    FSTDocument *doc1 = [self nextTestDocument];
-    [documentCache addEntry:doc1 group:group];
-    keySet = [keySet setByAddingObject:doc1.key];
-    [toBeRetained addObject:doc1.key];
-    FSTDocument *doc2 = [self nextTestDocument];
-    [documentCache addEntry:doc2 group:group];
-    keySet = [keySet setByAddingObject:doc2.key];
-    [toBeRetained addObject:doc2.key];
-    [queryCache addMatchingKeys:keySet
-                    forTargetID:queryData.targetID
-               atSequenceNumber:queryData.sequenceNumber
-                          group:group];
+    NSMutableArray *mutations = [NSMutableArray arrayWithCapacity:2];
+    // Add two documents to first target, and register a mutation on the second one
+    {
+      FSTQueryData *queryData = [self nextTestQuery];
+      [queryCache addQueryData:queryData];
+      FSTDocumentKeySet *keySet = [FSTImmutableSortedSet keySet];
+      FSTDocument *doc1 = [self nextTestDocument];
+      [documentCache addEntry:doc1];
+      keySet = [keySet setByAddingObject:doc1.key];
+      [toBeRetained addObject:doc1.key];
+      FSTDocument *doc2 = [self nextTestDocument];
+      [documentCache addEntry:doc2];
+      keySet = [keySet setByAddingObject:doc2.key];
+      [toBeRetained addObject:doc2.key];
+      [queryCache addMatchingKeys:keySet
+                      forTargetID:queryData.targetID
+                 atSequenceNumber:queryData.sequenceNumber
+      ];
 
-    FSTObjectValue *newValue = [[FSTObjectValue alloc] initWithDictionary:@{@"foo" : [FSTStringValue stringValue:@"bar"]}];
-    [mutations addObject:[[FSTSetMutation alloc] initWithKey:doc2.key
-                                                       value:newValue
-                                                precondition:[FSTPrecondition none]]];
-  }
+      FSTObjectValue *newValue = [[FSTObjectValue alloc] initWithDictionary:@{@"foo": [FSTStringValue stringValue:@"bar"]}];
+      [mutations addObject:[[FSTSetMutation alloc] initWithKey:doc2.key
+                                                         value:newValue
+                                                  precondition:[FSTPrecondition none]]];
+    }
 
-  // Add one document to the second target
-  {
-    FSTQueryData *queryData = [self nextTestQuery];
-    [queryCache addQueryData:queryData group:group];
-    FSTDocumentKeySet *keySet = [FSTImmutableSortedSet keySet];
-    FSTDocument *doc1 = [self nextTestDocument];
-    [documentCache addEntry:doc1 group:group];
-    keySet = [keySet setByAddingObject:doc1.key];
-    [toBeRetained addObject:doc1.key];
-    [queryCache addMatchingKeys:keySet
-                    forTargetID:queryData.targetID
-               atSequenceNumber:queryData.sequenceNumber
-                          group:group];
-  }
+    // Add one document to the second target
+    {
+      FSTQueryData *queryData = [self nextTestQuery];
+      [queryCache addQueryData:queryData];
+      FSTDocumentKeySet *keySet = [FSTImmutableSortedSet keySet];
+      FSTDocument *doc1 = [self nextTestDocument];
+      [documentCache addEntry:doc1];
+      keySet = [keySet setByAddingObject:doc1.key];
+      [toBeRetained addObject:doc1.key];
+      [queryCache addMatchingKeys:keySet
+                      forTargetID:queryData.targetID
+                 atSequenceNumber:queryData.sequenceNumber
+      ];
+    }
 
-  {
-    FSTDocument *doc1 = [self nextTestDocument];
-    [mutations addObject:[[FSTSetMutation alloc] initWithKey:doc1.key
-                                                       value:doc1.data
-                                                precondition:[FSTPrecondition none]]];
-    [documentCache addEntry:doc1 group:group];
-    [toBeRetained addObject:doc1.key];
-  }
+    {
+      FSTDocument *doc1 = [self nextTestDocument];
+      [mutations addObject:[[FSTSetMutation alloc] initWithKey:doc1.key
+                                                         value:doc1.data
+                                                  precondition:[FSTPrecondition none]]];
+      [documentCache addEntry:doc1];
+      [toBeRetained addObject:doc1.key];
+    }
 
-  FIRTimestamp *writeTime = [FIRTimestamp timestamp];
-  [mutationQueue addMutationBatchWithWriteTime:writeTime mutations:mutations group:group];
+    FIRTimestamp *writeTime = [FIRTimestamp timestamp];
+    [mutationQueue addMutationBatchWithWriteTime:writeTime mutations:mutations];
 
 
-  // Now add the docs we expect to get resolved.
-  NSUInteger expectedRemoveCount = 5;
-  NSMutableSet<FSTDocumentKey *> *toBeRemoved = [NSMutableSet setWithCapacity:expectedRemoveCount];
-  FSTDocumentKeySet *removedSet = [FSTDocumentKeySet keySet];
-  for (int i = 0; i < expectedRemoveCount; i++) {
-    FSTDocument *doc = [self nextTestDocument];
-    [toBeRemoved addObject:doc.key];
-    [documentCache addEntry:doc group:group];
-    removedSet = [removedSet setByAddingObject:doc.key];
-  }
-  [queryCache addPotentiallyOrphanedDocuments:removedSet atSequenceNumber:1000 group:group];
-  [persistence commitGroup:group];
+    // Now add the docs we expect to get resolved.
+    NSUInteger expectedRemoveCount = 5;
+    NSMutableSet<FSTDocumentKey *> *toBeRemoved = [NSMutableSet setWithCapacity:expectedRemoveCount];
+    FSTDocumentKeySet *removedSet = [FSTDocumentKeySet keySet];
+    for (int i = 0; i < expectedRemoveCount; i++) {
+      FSTDocument *doc = [self nextTestDocument];
+      [toBeRemoved addObject:doc.key];
+      [documentCache addEntry:doc];
+      removedSet = [removedSet setByAddingObject:doc.key];
+    }
+    [queryCache addPotentiallyOrphanedDocuments:removedSet atSequenceNumber:1000];
+    NSUInteger removed =
+            [gc removeOrphanedDocuments:documentCache throughSequenceNumber:1000 mutationQueue:mutationQueue];
 
-  FSTWriteGroup *gcGroup = [persistence startGroupWithAction:@"gc"];
-  NSUInteger removed =
-      [gc removeOrphanedDocuments:documentCache throughSequenceNumber:1000 mutationQueue:mutationQueue group:gcGroup];
-  [persistence commitGroup:gcGroup];
-
-  XCTAssertEqual(expectedRemoveCount, removed);
-  for (FSTDocumentKey *key in toBeRemoved) {
-    XCTAssertNil([documentCache entryForKey:key]);
-    XCTAssertFalse([queryCache containsKey:key]);
-  }
-  for (FSTDocumentKey *key in toBeRetained) {
-    XCTAssertNotNil([documentCache entryForKey:key], @"Missing document %@", key);
-  }
-  [queryCache shutdown];
-  [mutationQueue shutdown];
-  [documentCache shutdown];
+    XCTAssertEqual(expectedRemoveCount, removed);
+    for (FSTDocumentKey *key in toBeRemoved) {
+      XCTAssertNil([documentCache entryForKey:key]);
+      XCTAssertFalse([queryCache containsKey:key]);
+    }
+    for (FSTDocumentKey *key in toBeRetained) {
+      XCTAssertNotNil([documentCache entryForKey:key], @"Missing document %@", key);
+    }
+    //[queryCache shutdown];
+    [mutationQueue shutdown];
+    [documentCache shutdown];
+  });
   [persistence shutdown];
 }
 
@@ -424,39 +414,35 @@ NS_ASSUME_NONNULL_BEGIN
 
   // Add oldest target and docs
   FSTQueryData *oldestTarget = [self nextTestQuery];
-  {
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"setup"];
+  persistence.run("Add oldest target and docs", [&]() {
     FSTDocumentKeySet *oldestDocs = [FSTDocumentKeySet keySet];
 
     for (int i = 0; i < 5; i++) {
       FSTDocument *doc = [self nextTestDocument];
       [expectedRetained addObject:doc.key];
       oldestDocs = [oldestDocs setByAddingObject:doc.key];
-      [documentCache addEntry:doc group:group];
+      [documentCache addEntry:doc];
     }
 
-    [queryCache addQueryData:oldestTarget group:group];
+    [queryCache addQueryData:oldestTarget];
     [queryCache addMatchingKeys:oldestDocs
                     forTargetID:oldestTarget.targetID
-               atSequenceNumber:oldestTarget.sequenceNumber
-                          group:group];
-    [persistence commitGroup:group];
-  }
+               atSequenceNumber:oldestTarget.sequenceNumber];
+  });
 
   // Add middle target and docs. Some docs will be removed from this target later.
   FSTQueryData *middleTarget = [self nextTestQuery];
   FSTDocumentKeySet *middleDocsToRemove = [FSTDocumentKeySet keySet];
   FSTDocumentKey *middleDocToUpdate = nil;
-  {
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"setup"];
-    [queryCache addQueryData:middleTarget group:group];
+  persistence.run("Add middle target and docs", [&]() {
+    [queryCache addQueryData:middleTarget];
     FSTDocumentKeySet *middleDocs = [FSTDocumentKeySet keySet];
     // these docs will be removed from this target later
     for (int i = 0; i < 2; i++) {
       FSTDocument *doc = [self nextTestDocument];
       [expectedRemoved addObject:doc.key];
       middleDocs = [middleDocs setByAddingObject:doc.key];
-      [documentCache addEntry:doc group:group];
+      [documentCache addEntry:doc];
       middleDocsToRemove = [middleDocsToRemove setByAddingObject:doc.key];
     }
     // these docs stay in this target and only this target
@@ -464,35 +450,33 @@ NS_ASSUME_NONNULL_BEGIN
       FSTDocument *doc = [self nextTestDocument];
       [expectedRetained addObject:doc.key];
       middleDocs = [middleDocs setByAddingObject:doc.key];
-      [documentCache addEntry:doc group:group];
+      [documentCache addEntry:doc];
     }
     // This doc stays in this target, but gets updated
     {
       FSTDocument *doc = [self nextTestDocument];
       [expectedRetained addObject:doc.key];
       middleDocs = [middleDocs setByAddingObject:doc.key];
-      [documentCache addEntry:doc group:group];
+      [documentCache addEntry:doc];
       middleDocToUpdate = doc.key;
     }
     [queryCache addMatchingKeys:middleDocs
                     forTargetID:middleTarget.targetID
-               atSequenceNumber:middleTarget.sequenceNumber
-                          group:group];
-    [persistence commitGroup:group];
-  }
+               atSequenceNumber:middleTarget.sequenceNumber];
+
+  });
 
   // Add newest target and docs.
   FSTQueryData *newestTarget = [self nextTestQuery];
   FSTDocumentKeySet *newestDocsToAddToOldest = [FSTDocumentKeySet keySet];
-  {
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"setup"];
-    [queryCache addQueryData:newestTarget group:group];
+  persistence.run("Add newest target and docs", [&]() {
+    [queryCache addQueryData:newestTarget];
     FSTDocumentKeySet *newestDocs = [FSTDocumentKeySet keySet];
     for (int i = 0; i < 3; i++) {
       FSTDocument *doc = [self nextTestDocument];
       [expectedRemoved addObject:doc.key];
       newestDocs = [newestDocs setByAddingObject:doc.key];
-      [documentCache addEntry:doc group:group];
+      [documentCache addEntry:doc];
     }
     // docs to add to the oldest target, will be retained
     for (int i = 3; i < 5; i++) {
@@ -500,14 +484,12 @@ NS_ASSUME_NONNULL_BEGIN
       [expectedRetained addObject:doc.key];
       newestDocs = [newestDocs setByAddingObject:doc.key];
       newestDocsToAddToOldest = [newestDocsToAddToOldest setByAddingObject:doc.key];
-      [documentCache addEntry:doc group:group];
+      [documentCache addEntry:doc];
     }
     [queryCache addMatchingKeys:newestDocs
                     forTargetID:newestTarget.targetID
-               atSequenceNumber:newestTarget.sequenceNumber
-                          group:group];
-    [persistence commitGroup:group];
-  }
+               atSequenceNumber:newestTarget.sequenceNumber];
+  });
 
   // newestTarget removed here, this should bump sequence number? maybe?
   // we don't really need the sequence number for anything, we just don't include it
@@ -515,130 +497,110 @@ NS_ASSUME_NONNULL_BEGIN
   [self nextSequenceNumber];
 
   // 2 doc writes, add one of them to the oldest target.
-  {
+  persistence.run("2 doc writes, add one of them to the oldest target", [&]() {
     // write two docs and have them ack'd by the server. can skip mutation queue
     // and set them in document cache. Add potentially orphaned first, also add one
     // doc to a target.
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"setup"];
     FSTDocumentKeySet *docKeys = [FSTDocumentKeySet keySet];
 
     FSTDocument *doc1 = [self nextTestDocument];
-    [documentCache addEntry:doc1 group:group];
+    [documentCache addEntry:doc1];
     docKeys = [docKeys setByAddingObject:doc1.key];
     FSTDocumentKeySet *firstKey = docKeys;
 
     FSTDocument *doc2 = [self nextTestDocument];
-    [documentCache addEntry:doc2 group:group];
+    [documentCache addEntry:doc2];
     docKeys = [docKeys setByAddingObject:doc2.key];
 
-    [queryCache addPotentiallyOrphanedDocuments:docKeys atSequenceNumber:[self nextSequenceNumber] group:group];
+    [queryCache addPotentiallyOrphanedDocuments:docKeys atSequenceNumber:[self nextSequenceNumber]];
 
     NSData *token = [@"hello" dataUsingEncoding:NSUTF8StringEncoding];
     FSTListenSequenceNumber sequenceNumber = [self nextSequenceNumber];
     oldestTarget = [oldestTarget queryDataByReplacingSnapshotVersion:oldestTarget.snapshotVersion
                                                          resumeToken:token
                                                       sequenceNumber:sequenceNumber];
-    [queryCache updateQueryData:oldestTarget group:group];
+    [queryCache updateQueryData:oldestTarget];
     [queryCache addMatchingKeys:firstKey
                     forTargetID:oldestTarget.targetID
-               atSequenceNumber:oldestTarget.sequenceNumber
-                          group:group];
+               atSequenceNumber:oldestTarget.sequenceNumber];
     // nothing is keeping doc2 around, it should be removed
     [expectedRemoved addObject:doc2.key];
     // doc1 should be retained by being added to oldestTarget.
     [expectedRetained addObject:doc1.key];
-    [persistence commitGroup:group];
-  }
+  });
 
   // Remove some documents from the middle target.
-  {
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"setup"];
+  persistence.run("Remove some documents from the middle target", [&]() {
     FSTListenSequenceNumber sequenceNumber = [self nextSequenceNumber];
     NSData *token = [@"token" dataUsingEncoding:NSUTF8StringEncoding];
     middleTarget = [middleTarget queryDataByReplacingSnapshotVersion:middleTarget.snapshotVersion
                                                          resumeToken:token
                                                       sequenceNumber:sequenceNumber];
 
-    [queryCache updateQueryData:middleTarget group:group];
+    [queryCache updateQueryData:middleTarget];
     [queryCache removeMatchingKeys:middleDocsToRemove
                        forTargetID:middleTarget.targetID
-                  atSequenceNumber:sequenceNumber
-                             group:group];
-    [persistence commitGroup:group];
-  }
+                  atSequenceNumber:sequenceNumber];
+  });
 
   // Add a couple docs from the newest target to the oldest (preserves them past the point where newest was removed)
-  {
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"setup"];
+  persistence.run("Add a couple docs from the newest target to the oldest", [&]() {
     NSData *token = [@"add documents" dataUsingEncoding:NSUTF8StringEncoding];
     FSTListenSequenceNumber sequenceNumber = [self nextSequenceNumber];
     oldestTarget = [oldestTarget queryDataByReplacingSnapshotVersion:oldestTarget.snapshotVersion
                                                          resumeToken:token
                                                       sequenceNumber:sequenceNumber];
-    [queryCache updateQueryData:oldestTarget group:group];
+    [queryCache updateQueryData:oldestTarget];
     [queryCache addMatchingKeys:newestDocsToAddToOldest
                     forTargetID:oldestTarget.targetID
-               atSequenceNumber:oldestTarget.sequenceNumber
-                          group:group];
-
-    [persistence commitGroup:group];
-  }
+               atSequenceNumber:oldestTarget.sequenceNumber];
+  });
 
   // the sequence number right before middleTarget is updated, then removed.
   FSTListenSequenceNumber upperBound = [self nextSequenceNumber];
 
   // Update a doc in the middle target
-  {
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"setup"];
+  persistence.run("Update a doc in the middle target", [&]() {
     FSTTestSnapshotVersion version = 3;
     FSTDocument *doc = [FSTDocument documentWithData:_testValue
                                                  key:middleDocToUpdate
                                              version:FSTTestVersion(version)
                                    hasLocalMutations:NO];
-    [documentCache addEntry:doc group:group];
+    [documentCache addEntry:doc];
     NSData *token = [@"updated" dataUsingEncoding:NSUTF8StringEncoding];
     FSTListenSequenceNumber sequenceNumber = [self nextSequenceNumber];
     middleTarget = [middleTarget queryDataByReplacingSnapshotVersion:middleTarget.snapshotVersion
                                                          resumeToken:token
                                                       sequenceNumber:sequenceNumber];
-    [queryCache updateQueryData:middleTarget group:group];
-    [persistence commitGroup:group];
-  }
+    [queryCache updateQueryData:middleTarget];
+  });
 
   // middleTarget removed here
   [self nextSequenceNumber];
 
   // Write a doc and get an ack, not part of a target
-  {
-    FSTWriteGroup *group = [persistence startGroupWithAction:@"setup"];
+  persistence.run("Write a doc and get an ack, not part of a target", [&]() {
     FSTDocument *doc = [self nextTestDocument];
 
-    [documentCache addEntry:doc group:group];
+    [documentCache addEntry:doc];
     FSTDocumentKeySet *docKey = [[FSTDocumentKeySet keySet] setByAddingObject:doc.key];
     // This should be retained, it's too new to get removed.
     [expectedRetained addObject:doc.key];
     FSTListenSequenceNumber sequenceNumber = [self nextSequenceNumber];
-    [queryCache addPotentiallyOrphanedDocuments:docKey atSequenceNumber:sequenceNumber group:group];
-
-    [persistence commitGroup:group];
-  }
+    [queryCache addPotentiallyOrphanedDocuments:docKey atSequenceNumber:sequenceNumber];
+  });
 
   // Finally, do the garbage collection, up to but not including the removal of middleTarget
-  {
+  persistence.run("do the garbage collection, up to but not including the removal of middleTarget", [&]() {
     NSMutableDictionary<NSNumber *, FSTQueryData *> *liveQueries = [NSMutableDictionary dictionary];
     liveQueries[@(oldestTarget.targetID)] = oldestTarget;
-    FSTWriteGroup *targetGroup = [persistence startGroupWithAction:@"targets"];
     FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
-    NSUInteger queriesRemoved = [gc removeQueriesUpThroughSequenceNumber:upperBound liveQueries:liveQueries group:targetGroup];
-    [persistence commitGroup:targetGroup];
+    NSUInteger queriesRemoved = [gc removeQueriesUpThroughSequenceNumber:upperBound liveQueries:liveQueries];
     XCTAssertEqual(1, queriesRemoved, @"Expected to remove newest target");
 
-    FSTWriteGroup *docsGroup = [persistence startGroupWithAction:@"docs"];
     NSUInteger docsRemoved = [gc removeOrphanedDocuments:documentCache
                                    throughSequenceNumber:upperBound
-                                           mutationQueue:mutationQueue
-                                                   group:docsGroup];
-    [persistence commitGroup:docsGroup];
+                                           mutationQueue:mutationQueue];
     NSLog(@"Expected removed: %@", expectedRemoved);
     NSLog(@"Expected retained: %@", expectedRetained);
     XCTAssertEqual([expectedRemoved count], docsRemoved);
@@ -650,7 +612,7 @@ NS_ASSUME_NONNULL_BEGIN
     for (FSTDocumentKey *key in expectedRetained) {
       XCTAssertNotNil([documentCache entryForKey:key], @"Expected to find %@ in document cache", key);
     }
-  }
+  });
 
   [documentCache shutdown];
   [queryCache shutdown];

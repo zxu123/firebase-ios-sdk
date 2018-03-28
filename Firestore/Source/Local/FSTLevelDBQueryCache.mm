@@ -43,7 +43,7 @@ using leveldb::Status;
 
 namespace {
 
-FSTListenSequenceNumber ReadSequenceNumber(const Slice &slice) {
+FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
   FSTListenSequenceNumber decoded;
   absl::string_view tmp(slice.data(), slice.size());
   if (OrderedCode::ReadSignedNumIncreasing(&tmp, &decoded)) {
@@ -167,24 +167,24 @@ FSTListenSequenceNumber ReadSequenceNumber(const Slice &slice) {
         BOOL *stop))block {
   // Enumerate all targets, give their sequence numbers.
   std::string targetPrefix = [FSTLevelDBTargetKey keyPrefix];
-  std::unique_ptr<Iterator> it(_db->NewIterator([FSTLevelDB standardReadOptions]));
+  auto it = _db.currentTransaction->NewIterator();
   it->Seek(targetPrefix);
   BOOL stop = NO;
-  for (; !stop && it->Valid() && it->key().starts_with(targetPrefix); it->Next()) {
-    FSTQueryData *target = [self decodedTargetWithSlice:it->value()];
+  for (; !stop && it->Valid() && absl::StartsWith(it->key(), targetPrefix); it->Next()) {
+    FSTQueryData *target = [self decodedTarget:it->value()];
     block(target, &stop);
   }
 }
 
 - (void)enumerateOrphanedDocumentsUsingBlock:(void (^)(FSTDocumentKey *docKey, FSTListenSequenceNumber sequenceNumber, BOOL *stop))block {
   std::string documentTargetPrefix = [FSTLevelDBDocumentTargetKey keyPrefix];
-  std::unique_ptr<Iterator> it(_db->NewIterator([FSTLevelDB standardReadOptions]));
+  auto it = _db.currentTransaction->NewIterator();
   it->Seek(documentTargetPrefix);
   FSTListenSequenceNumber nextToReport = 0;
   FSTDocumentKey *keyToReport = nil;
   FSTLevelDBDocumentTargetKey *key = [[FSTLevelDBDocumentTargetKey alloc] init];
   BOOL stop = NO;
-  for (; !stop && it->Valid() && it->key().starts_with(documentTargetPrefix); it->Next()) {
+  for (; !stop && it->Valid() && absl::StartsWith(it->key(), documentTargetPrefix); it->Next()) {
     [key decodeKey:it->key()];
     if (key.isSentinel) {
       // if nextToReport is non-zero, report it, this is a new key so the last one
@@ -269,16 +269,15 @@ FSTListenSequenceNumber ReadSequenceNumber(const Slice &slice) {
 }
 
 - (NSUInteger)removeQueriesThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
-                                     liveQueries:(NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries
-                                           group:(FSTWriteGroup *)group {
+                                     liveQueries:(NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries {
   NSUInteger count = 0;
   std::string targetPrefix = [FSTLevelDBTargetKey keyPrefix];
-  std::unique_ptr<Iterator> it(_db->NewIterator([FSTLevelDB standardReadOptions]));
+  auto it = _db.currentTransaction->NewIterator();
   it->Seek(targetPrefix);
-  for (; it->Valid() && it->key().starts_with(targetPrefix); it->Next()) {
-    FSTQueryData *queryData = [self decodedTargetWithSlice:it->value()];
+  for (; it->Valid() && absl::StartsWith(it->key(), targetPrefix); it->Next()) {
+    FSTQueryData *queryData = [self decodedTarget:it->value()];
     if (queryData.sequenceNumber <= sequenceNumber && !liveQueries[@(queryData.targetID)]) {
-      [self removeQueryData:queryData group:group];
+      [self removeQueryData:queryData];
       count++;
     }
   }
@@ -293,7 +292,7 @@ FSTListenSequenceNumber ReadSequenceNumber(const Slice &slice) {
  * Parses the given bytes as an FSTPBTarget protocol buffer and then converts to the equivalent
  * query data.
  */
-- (FSTQueryData *)decodeTarget:(absl::string_view)encoded {
+- (FSTQueryData *)decodedTarget:(absl::string_view)encoded {
   NSData *data = [[NSData alloc] initWithBytesNoCopy:(void *)encoded.data()
                                               length:encoded.size()
                                         freeWhenDone:NO];
@@ -349,7 +348,7 @@ FSTListenSequenceNumber ReadSequenceNumber(const Slice &slice) {
 
     // Finally after finding a potential match, check that the query is actually equal to the
     // requested query.
-    FSTQueryData *target = [self decodeTarget:targetIterator->value()];
+    FSTQueryData *target = [self decodedTarget:targetIterator->value()];
     if ([target.query isEqual:query]) {
       return target;
     }
@@ -365,7 +364,7 @@ FSTListenSequenceNumber ReadSequenceNumber(const Slice &slice) {
   std::string encodedSequenceNumber;
   OrderedCode::WriteSignedNumIncreasing(&encodedSequenceNumber, sequenceNumber);
   [keys enumerateObjectsUsingBlock:^(FSTDocumentKey *documentKey, BOOL *stop) {
-    [group setData:encodedSequenceNumber forKey:[FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:documentKey]];
+    self->_db.currentTransaction->Put([FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:documentKey], encodedSequenceNumber);
   }];
 }
 
@@ -385,7 +384,7 @@ FSTListenSequenceNumber ReadSequenceNumber(const Slice &slice) {
     self->_db.currentTransaction->Put(
             [FSTLevelDBDocumentTargetKey keyWithDocumentKey:documentKey targetID:targetID],
             emptyBuffer);
-    [group setData:encodedSequenceNumber forKey:[FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:documentKey]];
+    self->_db.currentTransaction->Put([FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:documentKey], encodedSequenceNumber);
   }];
 }
 
@@ -425,8 +424,7 @@ FSTListenSequenceNumber ReadSequenceNumber(const Slice &slice) {
 }
 
 - (BOOL)removeOrphanedDocument:(FSTDocumentKey *)key
-                    upperBound:(__unused FSTListenSequenceNumber)upperBound
-                         group:(FSTWriteGroup *)group {
+                    upperBound:(__unused FSTListenSequenceNumber)upperBound {
   std::string sentinelKey = [FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:key];
   /*std::string sequenceNumberString;
   Status status = _db->Get([FSTLevelDB standardReadOptions], sentinelKey, &sequenceNumberString);
@@ -435,7 +433,8 @@ FSTListenSequenceNumber ReadSequenceNumber(const Slice &slice) {
   } else if (status.ok()) {
     FSTListenSequenceNumber sequenceNumber = ReadSequenceNumber(sequenceNumberString);
     if (sequenceNumber <= upperBound) {*/
-      [group removeMessageForKey:sentinelKey];
+  _db.currentTransaction->Delete(sentinelKey);
+      //[group removeMessageForKey:sentinelKey];
       return YES;
     /*} else {
       return NO;
@@ -469,13 +468,15 @@ FSTListenSequenceNumber ReadSequenceNumber(const Slice &slice) {
 #pragma mark - FSTGarbageSource implementation
 
 - (BOOL)containsKey:(const DocumentKey &)key {
+  // ignore sentinel rows when determining if a key belongs to a target. Sentinel row just says the document
+  // exists, not that it's a member of any particular target.
   std::string indexPrefix = [FSTLevelDBDocumentTargetKey keyPrefixWithResourcePath:key.path()];
   auto indexIterator = _db.currentTransaction->NewIterator();
   indexIterator->Seek(indexPrefix);
 
-  if (indexIterator->Valid()) {
+  for (; indexIterator->Valid() && absl::StartsWith(indexIterator->key(), indexPrefix); indexIterator->Next()) {
     FSTLevelDBDocumentTargetKey *rowKey = [[FSTLevelDBDocumentTargetKey alloc] init];
-    if ([rowKey decodeKey:indexIterator->key()] && DocumentKey{rowKey.documentKey} == key) {
+    if ([rowKey decodeKey:indexIterator->key()] && !rowKey.isSentinel && DocumentKey{rowKey.documentKey} == key) {
       return YES;
     }
   }

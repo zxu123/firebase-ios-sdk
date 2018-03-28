@@ -343,9 +343,9 @@ NS_ASSUME_NONNULL_BEGIN
         [remoteDocuments addEntry:doc];
       } else {
         FSTLog(
-                @"FSTLocalStore Ignoring outdated watch update for %@. "
+                @"FSTLocalStore Ignoring outdated watch update for %s. "
                         "Current version: %@  Watch version: %@",
-                key, existingDoc.version, doc.version);
+                key.ToString().c_str(), existingDoc.version, doc.version);
       }
 
       // The document might be garbage because it was unreferenced by everything.
