@@ -46,14 +46,14 @@ NS_ASSUME_NONNULL_BEGIN
   _remoteDocumentCache = [_db remoteDocumentCache];
 
   // Add a couple initial items to the cache.
-  FSTWriteGroup *group = [_db startGroupWithAction:@"Add initial docs."];
-  _kInitialADoc = FSTTestDoc("coll/a", 42, @{@"test" : @"data"}, NO);
-  [_remoteDocumentCache addEntry:_kInitialADoc group:group];
+  _db.run("Test setup", [&]() {
+    _kInitialADoc = FSTTestDoc("coll/a", 42, @{@"test" : @"data"}, NO);
+    [_remoteDocumentCache addEntry:_kInitialADoc];
 
-  _kInitialBDoc =
-      [FSTDeletedDocument documentWithKey:FSTTestDocKey(@"coll/b") version:FSTTestVersion(314)];
-  [_remoteDocumentCache addEntry:_kInitialBDoc group:group];
-  [_db commitGroup:group];
+    _kInitialBDoc =
+        [FSTDeletedDocument documentWithKey:FSTTestDocKey(@"coll/b") version:FSTTestVersion(314)];
+    [_remoteDocumentCache addEntry:_kInitialBDoc];
+  });
 
   _remoteDocumentBuffer =
       [FSTRemoteDocumentChangeBuffer changeBufferWithCache:_remoteDocumentCache];
@@ -68,8 +68,10 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (void)testReadUnchangedEntry {
-  XCTAssertEqualObjects([_remoteDocumentBuffer entryForKey:FSTTestDocKey(@"coll/a")],
-                        _kInitialADoc);
+  _db.run("testReadUnchangedEntry", [&]() {
+    XCTAssertEqualObjects([_remoteDocumentBuffer entryForKey:FSTTestDocKey(@"coll/a")],
+                          _kInitialADoc);
+  });
 }
 
 - (void)testAddEntryAndReadItBack {
@@ -78,34 +80,37 @@ NS_ASSUME_NONNULL_BEGIN
   XCTAssertEqualObjects([_remoteDocumentBuffer entryForKey:FSTTestDocKey(@"coll/a")], newADoc);
 
   // B should still be unchanged.
-  XCTAssertEqualObjects([_remoteDocumentBuffer entryForKey:FSTTestDocKey(@"coll/b")],
-                        _kInitialBDoc);
+  _db.run("testAddEntryAndReadItBack", [&]() {
+    XCTAssertEqualObjects([_remoteDocumentBuffer entryForKey:FSTTestDocKey(@"coll/b")],
+                          _kInitialBDoc);
+  });
 }
 
 - (void)testApplyChanges {
   FSTMaybeDocument *newADoc = FSTTestDoc("coll/a", 43, @{@"new" : @"data"}, NO);
   [_remoteDocumentBuffer addEntry:newADoc];
-  XCTAssertEqualObjects([_remoteDocumentBuffer entryForKey:FSTTestDocKey(@"coll/a")], newADoc);
+  _db.run("testApplyChanges setup", [&]() {
+    XCTAssertEqualObjects([_remoteDocumentBuffer entryForKey:FSTTestDocKey(@"coll/a")], newADoc);
 
-  // Reading directly against the cache should still yield the old result.
-  XCTAssertEqualObjects([_remoteDocumentCache entryForKey:FSTTestDocKey(@"coll/a")], _kInitialADoc);
+    // Reading directly against the cache should still yield the old result.
+    XCTAssertEqualObjects([_remoteDocumentCache entryForKey:FSTTestDocKey(@"coll/a")],
+                          _kInitialADoc);
+  });
 
-  FSTWriteGroup *group = [_db startGroupWithAction:@"Apply changes"];
-  [_remoteDocumentBuffer applyToWriteGroup:group];
-  [_db commitGroup:group];
+  _db.run("testApplyChanges", [&]() {
+    [_remoteDocumentBuffer apply];
 
-  // Reading against the cache should now yield the new result.
-  XCTAssertEqualObjects([_remoteDocumentCache entryForKey:FSTTestDocKey(@"coll/a")], newADoc);
+    // Reading against the cache should now yield the new result.
+    XCTAssertEqualObjects([_remoteDocumentCache entryForKey:FSTTestDocKey(@"coll/a")], newADoc);
+  });
 }
 
 - (void)testMethodsThrowAfterApply {
-  FSTWriteGroup *group = [_db startGroupWithAction:@"Apply changes"];
-  [_remoteDocumentBuffer applyToWriteGroup:group];
-  [_db commitGroup:group];
+  _db.run("testMethodsThrowAfterApply", [&]() { [_remoteDocumentBuffer apply]; });
 
   XCTAssertThrows([_remoteDocumentBuffer entryForKey:FSTTestDocKey(@"coll/a")]);
   XCTAssertThrows([_remoteDocumentBuffer addEntry:_kInitialADoc]);
-  XCTAssertThrows([_remoteDocumentBuffer applyToWriteGroup:group]);
+  XCTAssertThrows([_remoteDocumentBuffer apply]);
 }
 
 @end

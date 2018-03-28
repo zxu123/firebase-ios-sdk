@@ -20,12 +20,10 @@
 #import "Firestore/Source/Local/FSTGarbageCollector.h"
 #import "Firestore/Source/Model/FSTDocumentKeySet.h"
 
-@class FSTDocumentKey;
 @class FSTDocumentSet;
 @class FSTMaybeDocument;
 @class FSTQuery;
 @class FSTQueryData;
-@class FSTWriteGroup;
 @class FSTSnapshotVersion;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -74,8 +72,7 @@ NS_ASSUME_NONNULL_BEGIN
  *
  * @param snapshotVersion The new snapshot version.
  */
-- (void)setLastRemoteSnapshotVersion:(FSTSnapshotVersion *)snapshotVersion
-                               group:(FSTWriteGroup *)group;
+- (void)setLastRemoteSnapshotVersion:(FSTSnapshotVersion *)snapshotVersion;
 
 /**
  * Adds an entry in the cache.
@@ -84,7 +81,7 @@ NS_ASSUME_NONNULL_BEGIN
  *
  * @param queryData A new FSTQueryData instance to put in the cache.
  */
-- (void)addQueryData:(FSTQueryData *)queryData group:(FSTWriteGroup *)group;
+- (void)addQueryData:(FSTQueryData *)queryData;
 
 /**
  * Updates an entry in the cache.
@@ -93,10 +90,10 @@ NS_ASSUME_NONNULL_BEGIN
  * and it will be replaced.
  * @param queryData An FSTQueryData instance to replace an existing entry in the cache
  */
-- (void)updateQueryData:(FSTQueryData *)queryData group:(FSTWriteGroup *)group;
+- (void)updateQueryData:(FSTQueryData *)queryData;
 
 /** Removes the cached entry for the given query data (no-op if no entry exists). */
-- (void)removeQueryData:(FSTQueryData *)queryData group:(FSTWriteGroup *)group;
+- (void)removeQueryData:(FSTQueryData *)queryData;
 
 - (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData,
                                                      BOOL *stop))block;
@@ -105,12 +102,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (NSUInteger)removeQueriesThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
                                      liveQueries:
-                                         (NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries
-                                           group:(FSTWriteGroup *)group;
+                                         (NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries;
 
 - (void)addPotentiallyOrphanedDocuments:(FSTDocumentKeySet *)keys
-                       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
-                                  group:(FSTWriteGroup *)group;
+                       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
 
 /** Returns the number of targets cached. */
 - (int32_t)count;
@@ -126,21 +121,18 @@ NS_ASSUME_NONNULL_BEGIN
 /** Adds the given document keys to cached query results of the given target ID. */
 - (void)addMatchingKeys:(FSTDocumentKeySet *)keys
             forTargetID:(FSTTargetID)targetID
-       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
-                  group:(FSTWriteGroup *)group;
+       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
 
 /** Removes the given document keys from the cached query results of the given target ID. */
 - (void)removeMatchingKeys:(FSTDocumentKeySet *)keys
                forTargetID:(FSTTargetID)targetID
-          atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
-                     group:(FSTWriteGroup *)group;
+          atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
 
 /** Removes all the keys in the query results of the given target ID. */
-- (void)removeMatchingKeysForTargetID:(FSTTargetID)targetID group:(FSTWriteGroup *)group;
+- (void)removeMatchingKeysForTargetID:(FSTTargetID)targetID;
 
 - (BOOL)removeOrphanedDocument:(FSTDocumentKey *)key
-                    upperBound:(FSTListenSequenceNumber)upperBound
-                         group:(FSTWriteGroup *)group;
+                    upperBound:(FSTListenSequenceNumber)upperBound;
 
 - (FSTDocumentKeySet *)matchingKeysForTargetID:(FSTTargetID)targetID;
 

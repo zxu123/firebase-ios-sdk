@@ -18,7 +18,9 @@
 
 #include <leveldb/write_batch.h>
 
+#include "Firestore/core/src/firebase/firestore/local/leveldb_key.h"
 #include "Firestore/core/src/firebase/firestore/util/firebase_assert.h"
+#include "Firestore/core/src/firebase/firestore/util/log.h"
 
 using leveldb::DB;
 using leveldb::ReadOptions;
@@ -69,8 +71,14 @@ void LevelDbTransaction::Iterator::UpdateCurrent() {
 
 void LevelDbTransaction::Iterator::Seek(const std::string& key) {
   db_iter_->Seek(key);
+  FIREBASE_ASSERT_MESSAGE(db_iter_->status().ok(),
+                          "leveldb iterator reported an error: %s",
+                          db_iter_->status().ToString().c_str());
   for (; db_iter_->Valid() && IsDeleted(db_iter_->key()); db_iter_->Next()) {
   }
+  FIREBASE_ASSERT_MESSAGE(db_iter_->status().ok(),
+                          "leveldb iterator reported an error: %s",
+                          db_iter_->status().ToString().c_str());
   mutations_iter_ = txn_->mutations_.lower_bound(key);
   UpdateCurrent();
   last_version_ = txn_->version_;
@@ -107,6 +115,9 @@ void LevelDbTransaction::Iterator::AdvanceLDB() {
   do {
     db_iter_->Next();
   } while (db_iter_->Valid() && IsDeleted(db_iter_->key()));
+  FIREBASE_ASSERT_MESSAGE(db_iter_->status().ok(),
+                          "leveldb iterator reported an error: %s",
+                          db_iter_->status().ToString().c_str());
 }
 
 void LevelDbTransaction::Iterator::Next() {
@@ -131,6 +142,7 @@ bool LevelDbTransaction::Iterator::Valid() {
 }
 
 LevelDbTransaction::LevelDbTransaction(DB* db,
+                                       absl::string_view label,
                                        const ReadOptions& read_options,
                                        const WriteOptions& write_options)
     : db_(db),
@@ -138,7 +150,8 @@ LevelDbTransaction::LevelDbTransaction(DB* db,
       deletions_(),
       read_options_(read_options),
       write_options_(write_options),
-      version_(0) {
+      version_(0),
+      label_(std::string(label)) {
 }
 
 const ReadOptions& LevelDbTransaction::DefaultReadOptions() {
@@ -164,8 +177,9 @@ void LevelDbTransaction::Put(const absl::string_view& key,
   version_++;
 }
 
-LevelDbTransaction::Iterator* LevelDbTransaction::NewIterator() {
-  return new LevelDbTransaction::Iterator(this);
+std::unique_ptr<LevelDbTransaction::Iterator>
+LevelDbTransaction::NewIterator() {
+  return std::make_unique<LevelDbTransaction::Iterator>(this);
 }
 
 Status LevelDbTransaction::Get(const absl::string_view& key,
@@ -201,9 +215,33 @@ void LevelDbTransaction::Commit() {
     batch.Put(it->first, it->second);
   }
 
+  if (util::LogGetLevel() <= util::kLogLevelDebug) {
+    util::LogDebug("Committing transaction: %s", ToString().c_str());
+  }
+
   Status status = db_->Write(write_options_, &batch);
-  FIREBASE_ASSERT_MESSAGE(status.ok(), "Failed to commit transaction: %s",
-                          status.ToString().c_str());
+  FIREBASE_ASSERT_MESSAGE(status.ok(),
+                          "Failed to commit transaction:\n%s\n Failed: %s",
+                          ToString().c_str(), status.ToString().c_str());
+}
+
+std::string LevelDbTransaction::ToString() {
+  std::string dest(": <LevelDbTransaction " + label_ + ": ");
+  int64_t changes = deletions_.size() + mutations_.size();
+  int64_t bytes = 0;  // accumulator for size of individual mutations.
+  dest += std::to_string(changes) + " changes ";
+  std::string items;  // accumulator for individual changes.
+  for (auto it = deletions_.begin(); it != deletions_.end(); it++) {
+    items += "\n  - Delete " + Describe(*it);
+  }
+  for (auto it = mutations_.begin(); it != mutations_.end(); it++) {
+    int64_t change_bytes = it->second.length();
+    bytes += change_bytes;
+    items += "\n  - Put " + Describe(it->first) + " (" +
+             std::to_string(change_bytes) + " bytes)";
+  }
+  dest += "(" + std::to_string(bytes) + " bytes):" + items + ">";
+  return dest;
 }
 
 }  // namespace local

@@ -16,12 +16,12 @@
 
 #import <Foundation/Foundation.h>
 
+#include "Firestore/core/src/firebase/firestore/model/document_key.h"
+
 NS_ASSUME_NONNULL_BEGIN
 
 @protocol FSTRemoteDocumentCache;
 @class FSTMaybeDocument;
-@class FSTDocumentKey;
-@class FSTWriteGroup;
 
 /**
  * An in-memory buffer of entries to be written to an FSTRemoteDocumentCache. It can be used to
@@ -53,13 +53,13 @@ NS_ASSUME_NONNULL_BEGIN
  * @param documentKey The key of the entry to look up.
  * @return The cached FSTDocument or FSTDeletedDocument entry, or nil if we have nothing cached.
  */
-- (nullable FSTMaybeDocument *)entryForKey:(FSTDocumentKey *)documentKey;
+- (nullable FSTMaybeDocument *)entryForKey:
+    (const firebase::firestore::model::DocumentKey &)documentKey;
 
 /**
- * Applies buffered changes to the underlying FSTRemoteDocumentCache, using the provided
- * FSTWriteGroup.
+ * Applies buffered changes to the underlying FSTRemoteDocumentCache
  */
-- (void)applyToWriteGroup:(FSTWriteGroup *)group;
+- (void)apply;
 
 @end
 

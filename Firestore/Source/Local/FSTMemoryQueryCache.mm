@@ -23,6 +23,8 @@
 #import "Firestore/Source/Model/FSTDocumentKey.h"
 #import "FSTMemoryPersistence.h"
 
+#include "Firestore/core/src/firebase/firestore/model/document_key.h"
+
 NS_ASSUME_NONNULL_BEGIN
 
 @interface FSTMemoryQueryCache ()
@@ -41,12 +43,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property(nonatomic, assign) FSTListenSequenceNumber highestListenSequenceNumber;
 
+/** The last received snapshot version. */
+@property(nonatomic, strong) FSTSnapshotVersion *lastRemoteSnapshotVersion;
+
 @end
 
-@implementation FSTMemoryQueryCache {
-  /** The last received snapshot version. */
-  FSTSnapshotVersion *_lastRemoteSnapshotVersion;
-}
+@implementation FSTMemoryQueryCache
 
 - (instancetype)init {
   if (self = [super init]) {
@@ -77,16 +79,7 @@ NS_ASSUME_NONNULL_BEGIN
   return _highestListenSequenceNumber;
 }
 
-- (FSTSnapshotVersion *)lastRemoteSnapshotVersion {
-  return _lastRemoteSnapshotVersion;
-}
-
-- (void)setLastRemoteSnapshotVersion:(FSTSnapshotVersion *)snapshotVersion
-                               group:(FSTWriteGroup *)group {
-  _lastRemoteSnapshotVersion = snapshotVersion;
-}
-
-- (void)addQueryData:(FSTQueryData *)queryData group:(__unused FSTWriteGroup *)group {
+- (void)addQueryData:(FSTQueryData *)queryData {
   self.queries[queryData.query] = queryData;
   if (queryData.targetID > self.highestTargetID) {
     self.highestTargetID = queryData.targetID;
@@ -96,7 +89,7 @@ NS_ASSUME_NONNULL_BEGIN
   }
 }
 
-- (void)updateQueryData:(FSTQueryData *)queryData group:(FSTWriteGroup *)group {
+- (void)updateQueryData:(FSTQueryData *)queryData {
   self.queries[queryData.query] = queryData;
   if (queryData.targetID > self.highestTargetID) {
     self.highestTargetID = queryData.targetID;
@@ -110,7 +103,7 @@ NS_ASSUME_NONNULL_BEGIN
   return (int32_t)[self.queries count];
 }
 
-- (void)removeQueryData:(FSTQueryData *)queryData group:(__unused FSTWriteGroup *)group {
+- (void)removeQueryData:(FSTQueryData *)queryData {
   [self.queries removeObjectForKey:queryData.query];
   [self.references removeReferencesForID:queryData.targetID];
 }
@@ -137,8 +130,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (NSUInteger)removeQueriesThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
                                      liveQueries:
-                                         (NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries
-                                           group:(__unused FSTWriteGroup *)group {
+                                         (NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries {
   NSMutableArray<FSTQuery *> *toRemove = [NSMutableArray array];
   [self.queries
       enumerateKeysAndObjectsUsingBlock:^(FSTQuery *query, FSTQueryData *queryData, BOOL *stop) {
@@ -156,8 +148,7 @@ NS_ASSUME_NONNULL_BEGIN
 #pragma mark Reference tracking
 
 - (void)addPotentiallyOrphanedDocuments:(FSTDocumentKeySet *)keys
-                       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
-                                  group:(FSTWriteGroup *)group {
+                       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
   NSNumber *seqNum = @(sequenceNumber);
   [keys enumerateObjectsUsingBlock:^(FSTDocumentKey *key, BOOL *stop) {
     self.orphanedDocumentSequenceNumbers[key] = seqNum;
@@ -166,8 +157,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)addMatchingKeys:(FSTDocumentKeySet *)keys
             forTargetID:(FSTTargetID)targetID
-       atSequenceNumber:(__unused FSTListenSequenceNumber)sequenceNumber
-                  group:(__unused FSTWriteGroup *)group {
+       atSequenceNumber:(__unused FSTListenSequenceNumber)sequenceNumber {
   // We're adding docs to a target, we no longer care that they were mutated.
   for (FSTDocumentKey *key in [keys objectEnumerator]) {
     [self.orphanedDocumentSequenceNumbers removeObjectForKey:key];
@@ -177,13 +167,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)removeMatchingKeys:(FSTDocumentKeySet *)keys
                forTargetID:(FSTTargetID)targetID
-          atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
-                     group:(__unused FSTWriteGroup *)group {
+          atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
   [self.references removeReferencesToKeys:keys forID:targetID];
-  [self addPotentiallyOrphanedDocuments:keys atSequenceNumber:sequenceNumber group:group];
+  [self addPotentiallyOrphanedDocuments:keys atSequenceNumber:sequenceNumber];
 }
 
-- (void)removeMatchingKeysForTargetID:(FSTTargetID)targetID group:(__unused FSTWriteGroup *)group {
+- (void)removeMatchingKeysForTargetID:(FSTTargetID)targetID {
   [self.references removeReferencesForID:targetID];
 }
 
@@ -192,8 +181,7 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (BOOL)removeOrphanedDocument:(FSTDocumentKey *)key
-                    upperBound:(FSTListenSequenceNumber)upperBound
-                         group:(__unused FSTWriteGroup *)group {
+                    upperBound:(FSTListenSequenceNumber)upperBound {
   NSNumber *seq = self.orphanedDocumentSequenceNumbers[key];
   if (!seq) {
     return YES;
@@ -233,7 +221,7 @@ NS_ASSUME_NONNULL_BEGIN
   self.references.garbageCollector = garbageCollector;
 }
 
-- (BOOL)containsKey:(FSTDocumentKey *)key {
+- (BOOL)containsKey:(const firebase::firestore::model::DocumentKey &)key {
   // We intentionally ignore orphaned documents here, they are not part of a query and so
   // are not 'contained' by the query cache.
   return [self.references containsKey:key];

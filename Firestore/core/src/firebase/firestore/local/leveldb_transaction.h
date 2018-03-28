@@ -126,6 +126,7 @@ class LevelDbTransaction {
 
   explicit LevelDbTransaction(
       leveldb::DB* db,
+      absl::string_view label,
       const leveldb::ReadOptions& read_options = DefaultReadOptions(),
       const leveldb::WriteOptions& write_options = DefaultWriteOptions());
 
@@ -180,13 +181,15 @@ class LevelDbTransaction {
    * Returns a new Iterator over the pending changes in this transaction, merged
    * with the existing values already in leveldb.
    */
-  Iterator* NewIterator();
+  std::unique_ptr<Iterator> NewIterator();
 
   /**
    * Commits the transaction. All pending changes are written. The transaction
    * should not be used after calling this method.
    */
   void Commit();
+
+  std::string ToString();
 
  private:
   leveldb::DB* db_;
@@ -195,6 +198,7 @@ class LevelDbTransaction {
   leveldb::ReadOptions read_options_;
   leveldb::WriteOptions write_options_;
   int32_t version_;
+  std::string label_;
 };
 
 }  // namespace local
