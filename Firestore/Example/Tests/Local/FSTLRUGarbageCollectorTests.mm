@@ -113,7 +113,8 @@ NS_ASSUME_NONNULL_BEGIN
         [queryCache addQueryData:[self nextTestQuery]];
       }
 
-      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache
+                                                                   thresholds:FSTLRUThreshold::Defaults()];
       FSTListenSequenceNumber tenth = [gc queryCountForPercentile:10];
       XCTAssertEqual(expectedTenthPercentile, tenth, @"Total query count: %i", numQueries);
     });
@@ -134,7 +135,8 @@ NS_ASSUME_NONNULL_BEGIN
     persistence.run("no queries", [&]() {
       id<FSTQueryCache> queryCache = [persistence queryCache];
       [queryCache start];
-      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache
+                                                                           thresholds:FSTLRUThreshold::Defaults()];
       FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:0];
       XCTAssertEqual(kFSTListenSequenceNumberInvalid, highestToCollect);
     });
@@ -148,7 +150,8 @@ NS_ASSUME_NONNULL_BEGIN
     persistence.run("50 queries, want 10. Should get 1010.", [&]() {
       id <FSTQueryCache> queryCache = [persistence queryCache];
       [queryCache start];
-      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache
+                                                                           thresholds:FSTLRUThreshold::Defaults()];
       for (int i = 0; i < 50; i++) {
         [queryCache addQueryData:[self nextTestQuery]];
       }
@@ -165,7 +168,8 @@ NS_ASSUME_NONNULL_BEGIN
     persistence.run("50 queries, 9 with 1001, incrementing from there. Should get 1002.", [&]() {
       id <FSTQueryCache> queryCache = [persistence queryCache];
       [queryCache start];
-      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache
+                                                                           thresholds:FSTLRUThreshold::Defaults()];
       for (int i = 0; i < 9; i++) {
         [queryCache addQueryData:[self nextTestQuery]];
         _previousSequenceNumber = 1000;
@@ -187,7 +191,8 @@ NS_ASSUME_NONNULL_BEGIN
     persistence.run("50 queries, 11 with 1001, incrementing from there. Should get 1001.", [&]() {
       id <FSTQueryCache> queryCache = [persistence queryCache];
       [queryCache start];
-      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache
+                                                                           thresholds:FSTLRUThreshold::Defaults()];
       for (int i = 0; i < 11; i++) {
         [queryCache addQueryData:[self nextTestQuery]];
         _previousSequenceNumber = 1000;
@@ -209,7 +214,8 @@ NS_ASSUME_NONNULL_BEGIN
     persistence.run("A mutated doc at 1000, 50 queries 1001-1050. Should get 1009.", [&]() {
       id <FSTQueryCache> queryCache = [persistence queryCache];
       [queryCache start];
-      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache
+                                                                           thresholds:FSTLRUThreshold::Defaults()];
       FSTDocumentKey *key = [self nextTestDocKey];
       FSTDocumentKeySet *set = [[FSTDocumentKeySet keySet] setByAddingObject:key];
       [queryCache addPotentiallyOrphanedDocuments:set atSequenceNumber:1000];
@@ -230,7 +236,8 @@ NS_ASSUME_NONNULL_BEGIN
     persistence.run("Add mutated docs, then add one of them to a query target so it doesn't get GC'd. Expect 1002", [&]() {
       id <FSTQueryCache> queryCache = [persistence queryCache];
       [queryCache start];
-      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+      FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache
+                                                                           thresholds:FSTLRUThreshold::Defaults()];
       FSTDocument *docInQuery = [self nextTestDocument];
       FSTDocumentKeySet *set = [[FSTDocumentKeySet keySet] setByAddingObject:docInQuery.key];
       FSTDocumentKeySet *docInQuerySet = set;
@@ -263,7 +270,8 @@ NS_ASSUME_NONNULL_BEGIN
   persistence.run("testRemoveQueriesUpThroughSequenceNumber", [&]() {
     id<FSTQueryCache> queryCache = [persistence queryCache];
     [queryCache start];
-    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache
+                                                                         thresholds:FSTLRUThreshold::Defaults()];
     NSMutableDictionary<NSNumber *, FSTQueryData *> *liveQueries = [[NSMutableDictionary alloc] init];
     for (int i = 0; i < 100; i++) {
       FSTQueryData *queryData = [self nextTestQuery];
@@ -293,7 +301,8 @@ NS_ASSUME_NONNULL_BEGIN
     id <FSTRemoteDocumentCache> documentCache = [persistence remoteDocumentCache];
     User user("user");
     id <FSTMutationQueue> mutationQueue = [persistence mutationQueueForUser:user];
-    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache
+                                                                         thresholds:FSTLRUThreshold::Defaults()];
     [mutationQueue start];
 
     // Add docs to mutation queue, as well as keep some queries. verify that correct documents are
@@ -594,7 +603,8 @@ NS_ASSUME_NONNULL_BEGIN
   persistence.run("do the garbage collection, up to but not including the removal of middleTarget", [&]() {
     NSMutableDictionary<NSNumber *, FSTQueryData *> *liveQueries = [NSMutableDictionary dictionary];
     liveQueries[@(oldestTarget.targetID)] = oldestTarget;
-    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache];
+    FSTLRUGarbageCollector *gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache
+                                                                         thresholds:FSTLRUThreshold::Defaults()];
     NSUInteger queriesRemoved = [gc removeQueriesUpThroughSequenceNumber:upperBound liveQueries:liveQueries];
     XCTAssertEqual(1, queriesRemoved, @"Expected to remove newest target");
 
@@ -619,6 +629,10 @@ NS_ASSUME_NONNULL_BEGIN
   [mutationQueue shutdown];
   [persistence shutdown];
   // TODO(gsoltis): write this test
+}
+
+- (void)testShouldGC {
+
 }
 
 @end

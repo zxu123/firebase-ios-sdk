@@ -57,10 +57,11 @@ class RollingSequenceNumberBuffer {
   long _last_gc_time;
 }
 
-- (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache {
+- (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache thresholds:(FSTLRUThreshold)thresholds {
   self = [super init];
   if (self) {
     _queryCache = queryCache;
+    _threshold = std::move(thresholds);
   }
   return self;
 }
