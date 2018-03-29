@@ -393,9 +393,6 @@ NS_ASSUME_NONNULL_BEGIN
     for (FSTDocumentKey *key in toBeRetained) {
       XCTAssertNotNil([documentCache entryForKey:key], @"Missing document %@", key);
     }
-    //[queryCache shutdown];
-    [mutationQueue shutdown];
-    [documentCache shutdown];
   });
   [persistence shutdown];
 }
@@ -634,9 +631,6 @@ NS_ASSUME_NONNULL_BEGIN
     }
   });
 
-  [documentCache shutdown];
-  [queryCache shutdown];
-  [mutationQueue shutdown];
   [persistence shutdown];
   // TODO(gsoltis): write this test
 }
