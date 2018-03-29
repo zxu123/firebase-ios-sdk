@@ -92,10 +92,10 @@ NS_ASSUME_NONNULL_BEGIN
 /** Removes the cached entry for the given query data (no-op if no entry exists). */
 - (void)removeQueryData:(FSTQueryData *)queryData;
 
-- (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData,
-                                                     BOOL *stop))block;
+- (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData, BOOL *stop))block;
 
-- (void)enumerateOrphanedDocumentsUsingBlock:(void (^)(FSTDocumentKey *docKey, FSTListenSequenceNumber sequenceNumber, BOOL *stop))block;
+- (void)enumerateOrphanedDocumentsUsingBlock:
+    (void (^)(FSTDocumentKey *docKey, FSTListenSequenceNumber sequenceNumber, BOOL *stop))block;
 
 - (NSUInteger)removeQueriesThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
                                      liveQueries:
@@ -128,8 +128,7 @@ NS_ASSUME_NONNULL_BEGIN
 /** Removes all the keys in the query results of the given target ID. */
 - (void)removeMatchingKeysForTargetID:(FSTTargetID)targetID;
 
-- (BOOL)removeOrphanedDocument:(FSTDocumentKey *)key
-                    upperBound:(FSTListenSequenceNumber)upperBound;
+- (BOOL)removeOrphanedDocument:(FSTDocumentKey *)key upperBound:(FSTListenSequenceNumber)upperBound;
 
 - (FSTDocumentKeySet *)matchingKeysForTargetID:(FSTTargetID)targetID;
 

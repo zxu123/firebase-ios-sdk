@@ -58,7 +58,9 @@ class RollingSequenceNumberBuffer {
   long _startTimeEpoch;
 }
 
-- (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache thresholds:(FSTLRUThreshold)thresholds now:(long)now {
+- (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache
+                        thresholds:(FSTLRUThreshold)thresholds
+                               now:(long)now {
   self = [super init];
   if (self) {
     _queryCache = queryCache;
@@ -68,7 +70,7 @@ class RollingSequenceNumberBuffer {
   return self;
 }
 
-- (BOOL)shouldGCAt:(long)now persistence:(id<FSTPersistence>)persistence {
+- (BOOL)shouldGCAt:(long)now currentSize:(long)currentSize {
   long msSinceStart = now - _startTimeEpoch;
   if (msSinceStart < _threshold.min_ms_since_start) {
     return NO;
@@ -79,7 +81,7 @@ class RollingSequenceNumberBuffer {
     return NO;
   }
 
-  long total_storage_size = [persistence byteSize];
+  long total_storage_size = currentSize;
   if (total_storage_size < _threshold.max_bytes_stored) {
     return NO;
   }
@@ -99,12 +101,11 @@ class RollingSequenceNumberBuffer {
   }
   RollingSequenceNumberBuffer buffer(queryCount);
   RollingSequenceNumberBuffer *ptr_to_buffer = &buffer;
-  [self.queryCache
-      enumerateTargetsUsingBlock:^(FSTQueryData *queryData, BOOL *stop) {
-        ptr_to_buffer->AddElement(queryData.sequenceNumber);
-      }];
-  [self.queryCache enumerateOrphanedDocumentsUsingBlock:^(FSTDocumentKey *docKey,
-          FSTListenSequenceNumber sequenceNumber, BOOL *stop) {
+  [self.queryCache enumerateTargetsUsingBlock:^(FSTQueryData *queryData, BOOL *stop) {
+    ptr_to_buffer->AddElement(queryData.sequenceNumber);
+  }];
+  [self.queryCache enumerateOrphanedDocumentsUsingBlock:^(
+                       FSTDocumentKey *docKey, FSTListenSequenceNumber sequenceNumber, BOOL *stop) {
     ptr_to_buffer->AddElement(sequenceNumber);
   }];
   return buffer.max_value();
@@ -113,8 +114,8 @@ class RollingSequenceNumberBuffer {
 - (NSUInteger)removeQueriesUpThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
                                        liveQueries:
                                            (NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries {
-  return [self.queryCache removeQueriesThroughSequenceNumber:sequenceNumber
-                                                 liveQueries:liveQueries];
+  return
+      [self.queryCache removeQueriesThroughSequenceNumber:sequenceNumber liveQueries:liveQueries];
 }
 
 - (NSUInteger)removeOrphanedDocuments:(id<FSTRemoteDocumentCache>)remoteDocumentCache
@@ -132,20 +133,22 @@ class RollingSequenceNumberBuffer {
   NSUInteger queryCount = [self queryCountForPercentile:_threshold.percentile_to_gc];
   FSTListenSequenceNumber sequenceNumber = [self sequenceNumberForQueryCount:queryCount];
   NSDate *boundaryTime = [NSDate date];
-  NSUInteger queriesRemoved = [self removeQueriesUpThroughSequenceNumber:sequenceNumber
-                                                             liveQueries:liveQueries];
+  NSUInteger queriesRemoved =
+      [self removeQueriesUpThroughSequenceNumber:sequenceNumber liveQueries:liveQueries];
   NSDate *queryRemovalTime = [NSDate date];
   NSUInteger documentsRemoved = [self removeOrphanedDocuments:docCache
                                         throughSequenceNumber:sequenceNumber
                                                 mutationQueue:mutationQueue];
   NSDate *endTime = [NSDate date];
+  _lastGcTime = (long)([endTime timeIntervalSince1970] * 1000);
   int totalMs = (int)([endTime timeIntervalSinceDate:startTime] * 1000);
   int boundaryMs = (int)([boundaryTime timeIntervalSinceDate:startTime] * 1000);
   int queriesRemovedMs = (int)([queryRemovalTime timeIntervalSinceDate:boundaryTime] * 1000);
   int documentsRemovedMs = (int)([endTime timeIntervalSinceDate:queryRemovalTime] * 1000);
   NSMutableString *report = [NSMutableString string];
   [report appendFormat:@"Garbage collection finished in %ims", totalMs];
-  [report appendFormat:@"\n - Identified %i%% sequence number in %ims", _threshold.percentile_to_gc, boundaryMs];
+  [report appendFormat:@"\n - Identified %i%% sequence number in %ims", _threshold.percentile_to_gc,
+                       boundaryMs];
   [report appendFormat:@"\n - %i targets removed in %ims", queriesRemoved, queriesRemovedMs];
   [report appendFormat:@"\n - %i documents removed in %ims", documentsRemoved, documentsRemovedMs];
   FSTLog(@"%@", report);

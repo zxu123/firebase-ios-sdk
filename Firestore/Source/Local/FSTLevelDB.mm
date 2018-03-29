@@ -250,7 +250,7 @@ using leveldb::WriteOptions;
   Range range("", [FSTLevelDBKey maxKey]);
   uint64_t size;
   _ptr->GetApproximateSizes(&range, 1, &size);
-  return (long) size;
+  return (long)size;
 }
 
 #pragma mark - Error and Status

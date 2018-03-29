@@ -4,16 +4,17 @@
 #import "Firestore/Source/Local/FSTQueryData.h"
 #import "Firestore/Source/Local/FSTRemoteDocumentCache.h"
 
+@protocol FSTPersistence;
 @protocol FSTQueryCache;
 
 extern const FSTListenSequenceNumber kFSTListenSequenceNumberInvalid;
 
 struct FSTLRUThreshold {
-    long min_ms_since_start;
-    long max_bytes_stored;
-    long min_ms_between_attempts;
-    NSUInteger percentile_to_gc;
-  static const FSTLRUThreshold& Defaults() {
+  long min_ms_since_start;
+  long max_bytes_stored;
+  long min_ms_between_attempts;
+  NSUInteger percentile_to_gc;
+  static const FSTLRUThreshold &Defaults() {
     static const FSTLRUThreshold defaults = ([]() {
       FSTLRUThreshold thresholds;
       // 5 minutes
@@ -31,7 +32,9 @@ struct FSTLRUThreshold {
 
 @interface FSTLRUGarbageCollector : NSObject
 
-- (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache thresholds:(FSTLRUThreshold)thresholds now:(long)now;
+- (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache
+                        thresholds:(FSTLRUThreshold)thresholds
+                               now:(long)now;
 
 - (NSUInteger)queryCountForPercentile:(NSUInteger)percentile;
 
@@ -43,6 +46,12 @@ struct FSTLRUThreshold {
 
 - (NSUInteger)removeOrphanedDocuments:(id<FSTRemoteDocumentCache>)remoteDocumentCache
                 throughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
+                        mutationQueue:(id<FSTMutationQueue>)mutationQueue;
+
+- (BOOL)shouldGCAt:(long)now currentSize:(long)currentSize;
+
+- (void)collectGarbageWithLiveQueries:(NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries
+                        documentCache:(id<FSTRemoteDocumentCache>)docCache
                         mutationQueue:(id<FSTMutationQueue>)mutationQueue;
 
 @end

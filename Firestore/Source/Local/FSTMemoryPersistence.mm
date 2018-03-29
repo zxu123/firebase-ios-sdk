@@ -23,11 +23,11 @@
 #import "Firestore/Source/Local/FSTMemoryRemoteDocumentCache.h"
 #import "Firestore/Source/Util/FSTAssert.h"
 
+#import "FSTDocument.h"
+#import "FSTFieldValue.h"
 #include "Firestore/core/src/firebase/firestore/auth/user.h"
 #include "Firestore/core/src/firebase/firestore/model/database_id.h"
 #include "Firestore/core/src/firebase/firestore/model/resource_path.h"
-#import "FSTDocument.h"
-#import "FSTFieldValue.h"
 
 using firebase::firestore::auth::HashUser;
 using firebase::firestore::auth::User;
@@ -54,7 +54,7 @@ NS_ASSUME_NONNULL_BEGIN
   /** The FSTRemoteDocumentCache representing the persisted cache of remote documents. */
   FSTMemoryRemoteDocumentCache *_remoteDocumentCache;
 
-  std::unordered_map<User, FSTMemoryMutationQueue*, HashUser> _mutationQueues;
+  std::unordered_map<User, FSTMemoryMutationQueue *, HashUser> _mutationQueues;
 
   FSTTransactionRunner _transactionRunner;
 }
@@ -82,7 +82,8 @@ NS_ASSUME_NONNULL_BEGIN
   } else if (fieldClass == [FSTBlobValue class]) {
     return ((NSData *)fieldValue.value).length;
   } else if (fieldClass == [FSTReferenceValue class]) {
-    return sizeof(DatabaseId) + [FSTMemoryPersistence pathSizeInMemory:((FSTDocumentKey *)fieldValue.value).path];
+    return sizeof(DatabaseId) +
+           [FSTMemoryPersistence pathSizeInMemory:((FSTDocumentKey *)fieldValue.value).path];
   } else if (fieldClass == [FSTObjectValue class]) {
     return [FSTMemoryPersistence objectValueSizeInMemory:(FSTObjectValue *)fieldValue];
   } else if (fieldClass == [FSTArrayValue class]) {
@@ -98,10 +99,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (size_t)objectValueSizeInMemory:(FSTObjectValue *)object {
   __block size_t result = 0;
-  [object.internalValue enumerateKeysAndObjectsUsingBlock:^(NSString *key, FSTFieldValue *value, BOOL *stop) {
-    result += key.length;
-    result += [FSTMemoryPersistence valueSizeInMemory:value];
-  }];
+  [object.internalValue
+      enumerateKeysAndObjectsUsingBlock:^(NSString *key, FSTFieldValue *value, BOOL *stop) {
+        result += key.length;
+        result += [FSTMemoryPersistence valueSizeInMemory:value];
+      }];
   return result;
 }
 

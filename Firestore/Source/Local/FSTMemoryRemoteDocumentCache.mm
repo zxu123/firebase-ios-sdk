@@ -16,13 +16,13 @@
 
 #import "Firestore/Source/Local/FSTMemoryRemoteDocumentCache.h"
 
-#include "Firestore/core/src/firebase/firestore/model/resource_path.h"
 #import "Firestore/Source/Core/FSTQuery.h"
 #import "Firestore/Source/Local/FSTMemoryPersistence.h"
 #import "Firestore/Source/Local/FSTMutationQueue.h"
 #import "Firestore/Source/Local/FSTQueryCache.h"
 #import "Firestore/Source/Model/FSTDocument.h"
 #import "Firestore/Source/Model/FSTDocumentDictionary.h"
+#include "Firestore/core/src/firebase/firestore/model/resource_path.h"
 
 #include "Firestore/core/src/firebase/firestore/model/document_key.h"
 
@@ -106,7 +106,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (long)byteSize {
   __block long result = 0;
-  [self.docs enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, FSTMaybeDocument *value, BOOL *stop) {
+  [self.docs enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, FSTMaybeDocument *value,
+                                                 BOOL *stop) {
     result += [FSTMemoryPersistence pathSizeInMemory:key.path];
     result += [FSTMemoryPersistence docSizeInMemory:value];
   }];

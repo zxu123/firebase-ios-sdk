@@ -244,7 +244,6 @@ NS_ASSUME_NONNULL_BEGIN
     [self addMatchingKey:room1 forTargetID:rooms.targetID atSequenceNumber:rooms.sequenceNumber];
     [self addMatchingKey:room2 forTargetID:rooms.targetID atSequenceNumber:rooms.sequenceNumber];
 
-
     FSTQueryData *halls = [self queryDataWithQuery:FSTTestQuery("halls")];
     DocumentKey hall1 = testutil::Key("halls/bar");
     DocumentKey hall2 = testutil::Key("halls/foo");
@@ -427,16 +426,13 @@ NS_ASSUME_NONNULL_BEGIN
                                  resumeToken:resumeToken];
 }
 
-
 - (void)addMatchingKey:(FSTDocumentKey *)key
            forTargetID:(FSTTargetID)targetID
       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
   FSTDocumentKeySet *keys = [FSTDocumentKeySet keySet];
   keys = [keys setByAddingObject:key];
 
-  [self.queryCache addMatchingKeys:keys
-                       forTargetID:targetID
-                  atSequenceNumber:sequenceNumber];
+  [self.queryCache addMatchingKeys:keys forTargetID:targetID atSequenceNumber:sequenceNumber];
 }
 
 - (void)removeMatchingKey:(const DocumentKey &)key forTargetID:(FSTTargetID)targetID {

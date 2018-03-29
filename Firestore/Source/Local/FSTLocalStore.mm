@@ -16,7 +16,6 @@
 
 #import "Firestore/Source/Local/FSTLocalStore.h"
 
-#import "Firestore/Source/Public/FIRTimestamp.h"
 #import "Firestore/Source/Core/FSTListenSequence.h"
 #import "Firestore/Source/Core/FSTQuery.h"
 #import "Firestore/Source/Core/FSTSnapshotVersion.h"
@@ -35,6 +34,7 @@
 #import "Firestore/Source/Model/FSTDocumentDictionary.h"
 #import "Firestore/Source/Model/FSTMutation.h"
 #import "Firestore/Source/Model/FSTMutationBatch.h"
+#import "Firestore/Source/Public/FIRTimestamp.h"
 #import "Firestore/Source/Remote/FSTRemoteEvent.h"
 #import "Firestore/Source/Util/FSTAssert.h"
 #import "Firestore/Source/Util/FSTLogger.h"
@@ -332,13 +332,13 @@ NS_ASSUME_NONNULL_BEGIN
       // make an exception for [SnapshotVersion noVersion] which can happen for manufactured
       // events (e.g. in the case of a limbo document resolution failing).
       if (!existingDoc || [doc.version isEqual:[FSTSnapshotVersion noVersion]] ||
-              [doc.version compare:existingDoc.version] != NSOrderedAscending) {
+          [doc.version compare:existingDoc.version] != NSOrderedAscending) {
         [remoteDocuments addEntry:doc];
       } else {
         FSTLog(
-                @"FSTLocalStore Ignoring outdated watch update for %s. "
-                        "Current version: %@  Watch version: %@",
-                key.ToString().c_str(), existingDoc.version, doc.version);
+            @"FSTLocalStore Ignoring outdated watch update for %s. "
+             "Current version: %@  Watch version: %@",
+            key.ToString().c_str(), existingDoc.version, doc.version);
       }
 
       // The document might be garbage because it was unreferenced by everything.
@@ -346,10 +346,9 @@ NS_ASSUME_NONNULL_BEGIN
       [self.garbageCollector addPotentialGarbageKey:key];
     }
 
-
-    // HACK: The only reason we allow omitting snapshot version is so we can synthesize remote events
-    // when we get permission denied errors while trying to resolve the state of a locally cached
-    // document that is in limbo.
+    // HACK: The only reason we allow omitting snapshot version is so we can synthesize remote
+    // events when we get permission denied errors while trying to resolve the state of a locally
+    // cached document that is in limbo.
     FSTSnapshotVersion *lastRemoteVersion = [self.queryCache lastRemoteSnapshotVersion];
     FSTSnapshotVersion *remoteVersion = remoteEvent.snapshotVersion;
     if (![remoteVersion isEqual:[FSTSnapshotVersion noVersion]]) {
@@ -445,7 +444,7 @@ NS_ASSUME_NONNULL_BEGIN
     // release any held batch results.
     if ([self.targetIDs count] == 0) {
       FSTRemoteDocumentChangeBuffer *remoteDocuments =
-              [FSTRemoteDocumentChangeBuffer changeBufferWithCache:self.remoteDocumentCache];
+          [FSTRemoteDocumentChangeBuffer changeBufferWithCache:self.remoteDocumentCache];
 
       [self releaseHeldBatchResultsWithRemoteDocuments:remoteDocuments];
 

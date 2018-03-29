@@ -16,9 +16,9 @@
 
 #import "Firestore/Source/Local/FSTMemoryRemoteDocumentCache.h"
 
+#import "Firestore/Source/Local/FSTMemoryPersistence.h"
 #import "Firestore/Source/Model/FSTDocument.h"
 #import "Firestore/Source/Model/FSTFieldValue.h"
-#import "Firestore/Source/Local/FSTMemoryPersistence.h"
 
 #import "Firestore/Example/Tests/Local/FSTPersistenceTestHelpers.h"
 #import "Firestore/Example/Tests/Local/FSTRemoteDocumentCacheTests.h"
@@ -51,12 +51,14 @@
 - (void)testByteSize {
   self.persistence.run("testByteSize", [&]() {
     FSTDocument *doc = FSTTestDoc("a/b", 1, @{
-            @"key1": @1,  // 4 bytes + 8 bytes
-            @"key2": @{   // 4 bytes
-                    @"isBool": @YES,  // 6 bytes + 1 byte
-                    @"isString": @"also yes"  // 8 bytes + 8 bytes
-            }
-    }, NO);
+      @"key1" : @1,  // 4 bytes + 8 bytes
+      @"key2" : @{
+        // 4 bytes
+        @"isBool" : @YES,          // 6 bytes + 1 byte
+        @"isString" : @"also yes"  // 8 bytes + 8 bytes
+      }
+    },
+                                  NO);
     [self.remoteDocumentCache addEntry:doc];
 
     long bytes = [(FSTMemoryRemoteDocumentCache *)self.remoteDocumentCache byteSize];

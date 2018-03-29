@@ -16,12 +16,12 @@
 
 #import "Firestore/Source/Local/FSTMemoryQueryCache.h"
 
+#import "FSTMemoryPersistence.h"
 #import "Firestore/Source/Core/FSTQuery.h"
 #import "Firestore/Source/Core/FSTSnapshotVersion.h"
 #import "Firestore/Source/Local/FSTQueryData.h"
 #import "Firestore/Source/Local/FSTReferenceSet.h"
 #import "Firestore/Source/Model/FSTDocumentKey.h"
-#import "FSTMemoryPersistence.h"
 
 #include "Firestore/core/src/firebase/firestore/model/document_key.h"
 
@@ -108,20 +108,20 @@ NS_ASSUME_NONNULL_BEGIN
   return self.queries[query];
 }
 
-- (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData,
-        BOOL *stop))block {
+- (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData, BOOL *stop))block {
   [self.queries
-          enumerateKeysAndObjectsUsingBlock:^(FSTQuery *key, FSTQueryData *queryData, BOOL *stop) {
-            block(queryData, stop);
-          }];
+      enumerateKeysAndObjectsUsingBlock:^(FSTQuery *key, FSTQueryData *queryData, BOOL *stop) {
+        block(queryData, stop);
+      }];
 }
 
-- (void)enumerateOrphanedDocumentsUsingBlock:(void (^)(FSTDocumentKey *docKey, FSTListenSequenceNumber sequenceNumber, BOOL *stop))block {
+- (void)enumerateOrphanedDocumentsUsingBlock:
+    (void (^)(FSTDocumentKey *docKey, FSTListenSequenceNumber sequenceNumber, BOOL *stop))block {
   [self.orphanedDocumentSequenceNumbers
-          enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, NSNumber *sequenceNumber,
-                  BOOL *stop) {
-            block(key, [sequenceNumber longLongValue], stop);
-          }];
+      enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, NSNumber *sequenceNumber,
+                                          BOOL *stop) {
+        block(key, [sequenceNumber longLongValue], stop);
+      }];
 }
 
 - (NSUInteger)removeQueriesThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
@@ -193,17 +193,19 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (long)byteSize {
   __block long result = 0;
-  [self.orphanedDocumentSequenceNumbers enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, NSNumber *obj, BOOL *stop) {
-    result += [FSTMemoryPersistence pathSizeInMemory:key.path];
-    result += sizeof(int64_t); // account for the number
-  }];
-  [self.queries enumerateKeysAndObjectsUsingBlock:^(FSTQuery *query, FSTQueryData *queryData, BOOL *stop) {
-    // The queryData also includes the query, so we can use that calculation twice.
-    result += 2 * query.canonicalID.length;
-    result += queryData.resumeToken.length;
-    // Technically we are ignoring a small amount of QueryData overhead, we are just
-    // capturing the dynamic elements.
-  }];
+  [self.orphanedDocumentSequenceNumbers
+      enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, NSNumber *obj, BOOL *stop) {
+        result += [FSTMemoryPersistence pathSizeInMemory:key.path];
+        result += sizeof(int64_t);  // account for the number
+      }];
+  [self.queries
+      enumerateKeysAndObjectsUsingBlock:^(FSTQuery *query, FSTQueryData *queryData, BOOL *stop) {
+        // The queryData also includes the query, so we can use that calculation twice.
+        result += 2 * query.canonicalID.length;
+        result += queryData.resumeToken.length;
+        // Technically we are ignoring a small amount of QueryData overhead, we are just
+        // capturing the dynamic elements.
+      }];
   return result;
 }
 
