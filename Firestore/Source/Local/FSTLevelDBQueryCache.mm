@@ -160,9 +160,6 @@ FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
   _db.currentTransaction->Put([FSTLevelDBTargetGlobalKey key], self.metadata);
 }
 
-- (void)shutdown {
-}
-
 - (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData,
         BOOL *stop))block {
   // Enumerate all targets, give their sequence numbers.

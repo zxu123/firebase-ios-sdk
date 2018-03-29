@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Google
+ * Copyright 2018 Google
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,20 +14,17 @@
  * limitations under the License.
  */
 
-#import <Foundation/Foundation.h>
+#include "Firestore/core/src/firebase/firestore/immutable/sorted_map_base.h"
 
-#import "Firestore/Source/Core/FSTSyncEngine.h"
+namespace firebase {
+namespace firestore {
+namespace immutable {
+namespace impl {
 
-#include "Firestore/core/src/firebase/firestore/model/document_key.h"
+// Define external storage for constants:
+constexpr SortedMapBase::size_type SortedMapBase::kFixedSize;
 
-NS_ASSUME_NONNULL_BEGIN
-
-@interface FSTSyncEngine (Testing)
-
-/** Returns the current set of limbo document keys and their associated target IDs. */
-- (std::map<firebase::firestore::model::DocumentKey, firebase::firestore::model::TargetId>)
-    currentLimboDocuments;
-
-@end
-
-NS_ASSUME_NONNULL_END
+}  // namespace impl
+}  // namespace immutable
+}  // namespace firestore
+}  // namespace firebase
