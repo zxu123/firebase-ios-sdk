@@ -54,24 +54,27 @@ class RollingSequenceNumberBuffer {
 
 @implementation FSTLRUGarbageCollector {
   FSTLRUThreshold _threshold;
-  long _last_gc_time;
+  long _lastGcTime;
+  long _startTimeEpoch;
 }
 
-- (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache thresholds:(FSTLRUThreshold)thresholds {
+- (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache thresholds:(FSTLRUThreshold)thresholds now:(long)now {
   self = [super init];
   if (self) {
     _queryCache = queryCache;
     _threshold = std::move(thresholds);
+    _startTimeEpoch = now;
   }
   return self;
 }
 
-- (BOOL)shouldGC:(long)msSinceStart now:(long)now persistence:(id<FSTPersistence>)persistence {
+- (BOOL)shouldGCAt:(long)now persistence:(id<FSTPersistence>)persistence {
+  long msSinceStart = now - _startTimeEpoch;
   if (msSinceStart < _threshold.min_ms_since_start) {
     return NO;
   }
 
-  long elapsed = now - _last_gc_time;
+  long elapsed = now - _lastGcTime;
   if (elapsed < _threshold.min_ms_between_attempts) {
     return NO;
   }

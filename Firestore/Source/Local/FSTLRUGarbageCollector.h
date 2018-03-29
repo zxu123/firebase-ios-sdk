@@ -31,7 +31,7 @@ struct FSTLRUThreshold {
 
 @interface FSTLRUGarbageCollector : NSObject
 
-- (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache thresholds:(FSTLRUThreshold)thresholds;
+- (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache thresholds:(FSTLRUThreshold)thresholds now:(long)now;
 
 - (NSUInteger)queryCountForPercentile:(NSUInteger)percentile;
 
