@@ -268,8 +268,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (FSTMaybeDocumentDictionary *)applyRemoteEvent:(FSTRemoteEvent *)remoteEvent {
   return self.persistence.run("Apply remote event", [&]() -> FSTMaybeDocumentDictionary * {
-    id<FSTQueryCache> queryCache = self.queryCache;
-
     FSTRemoteDocumentChangeBuffer *remoteDocuments =
         [FSTRemoteDocumentChangeBuffer changeBufferWithCache:self.remoteDocumentCache];
 
@@ -301,17 +299,17 @@ NS_ASSUME_NONNULL_BEGIN
         // First make sure that all references are deleted.
         if ([mapping isKindOfClass:[FSTResetMapping class]]) {
           FSTResetMapping *reset = (FSTResetMapping *)mapping;
-          [queryCache removeMatchingKeysForTargetID:targetID];
-          [queryCache addMatchingKeys:reset.documents
+          [self.queryCache removeMatchingKeysForTargetID:targetID];
+          [self.queryCache addMatchingKeys:reset.documents
                           forTargetID:targetID
                      atSequenceNumber:sequenceNumber];
 
         } else if ([mapping isKindOfClass:[FSTUpdateMapping class]]) {
           FSTUpdateMapping *update = (FSTUpdateMapping *)mapping;
-          [queryCache removeMatchingKeys:update.removedDocuments
+          [self.queryCache removeMatchingKeys:update.removedDocuments
                              forTargetID:targetID
                         atSequenceNumber:sequenceNumber];
-          [queryCache addMatchingKeys:update.addedDocuments
+          [self.queryCache addMatchingKeys:update.addedDocuments
                           forTargetID:targetID
                      atSequenceNumber:sequenceNumber];
         } else {
