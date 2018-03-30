@@ -25,6 +25,7 @@
 @class FSTQuery;
 @class FSTQueryData;
 @class FSTSnapshotVersion;
+@class FSTTargetMapping;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -131,6 +132,11 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)removeOrphanedDocument:(FSTDocumentKey *)key upperBound:(FSTListenSequenceNumber)upperBound;
 
 - (FSTDocumentKeySet *)matchingKeysForTargetID:(FSTTargetID)targetID;
+
+// TODO(gsoltis): Think about:
+- (void)handleMapping:(FSTTargetID)targetId
+              mapping:(FSTTargetMapping *)mapping
+             orphaned:(std::set<FSTDocumentKey *> *)orphaned;
 
 @end
 
