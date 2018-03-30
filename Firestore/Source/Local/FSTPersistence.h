@@ -93,7 +93,7 @@ struct FSTTransactionRunner;
 
 @protocol FSTTransactional
 
-- (void)startTransaction:(const std::string &)label;
+- (void)startTransaction:(absl::string_view)label;
 
 - (void)commitTransaction;
 
@@ -122,7 +122,7 @@ struct FSTTransactionRunner {
    */
 
   template <typename F>
-  auto operator()(const std::string &label, F block) const ->
+  auto operator()(absl::string_view label, F block) const ->
       typename std::enable_if<std::is_void<decltype(block())>::value, void>::type {
     __strong id<FSTTransactional> strongDb = _db;
     if (!strongDb && _expect_db) {
@@ -138,7 +138,7 @@ struct FSTTransactionRunner {
   }
 
   template <typename F>
-  auto operator()(const std::string &label, F block) const ->
+  auto operator()(absl::string_view label, F block) const ->
       typename std::enable_if<!std::is_void<decltype(block())>::value, decltype(block())>::type {
     using ReturnT = decltype(block());
     __strong id<FSTTransactional> strongDb = _db;

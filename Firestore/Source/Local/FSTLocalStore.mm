@@ -316,7 +316,6 @@ NS_ASSUME_NONNULL_BEGIN
           FSTFail(@"Unknown mapping type: %@", mapping);
         }
       }
-
     }];
 
     // TODO(klimt): This could probably be an NSMutableDictionary.
@@ -401,7 +400,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (FSTQueryData *)allocateQuery:(FSTQuery *)query {
   FSTQueryData *queryData = self.persistence.run("Allocate query", [&]() -> FSTQueryData * {
     FSTQueryData *cached = [self.queryCache queryDataForQuery:query];
-    // TODO(mcg): freshen last accessed date if found?
+    // TODO(mcg): freshen last accessed date if cached exists?
     if (!cached) {
       cached = [[FSTQueryData alloc] initWithQuery:query
                                           targetID:_targetIDGenerator.NextId()
