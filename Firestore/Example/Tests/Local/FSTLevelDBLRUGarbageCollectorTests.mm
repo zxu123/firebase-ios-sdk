@@ -1,3 +1,4 @@
+#import <Firestore/Source/Local/FSTLevelDB.h>
 #import "Firestore/Example/Tests/Local/FSTLRUGarbageCollectorTests.h"
 
 #import "Firestore/Example/Tests/Local/FSTPersistenceTestHelpers.h"
@@ -11,6 +12,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (id<FSTPersistence>)newPersistence {
   return [FSTPersistenceTestHelpers levelDBPersistence];
+}
+
+- (long)compactedSize:(id<FSTPersistence>)persistence {
+  // We do this in tests because otherwise at small data sizes there's too much variance
+  // to assess GC effectiveness.
+  ((FSTLevelDB *)persistence).ptr->CompactRange(NULL, NULL);
+  return [persistence byteSize];
 }
 
 @end

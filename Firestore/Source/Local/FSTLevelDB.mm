@@ -248,9 +248,12 @@ using leveldb::WriteOptions;
 
 - (long)byteSize {
   Range range("", [FSTLevelDBKey maxKey]);
-  uint64_t size;
-  _ptr->GetApproximateSizes(&range, 1, &size);
-  return (long)size;
+  uint64_t disk_size;
+  _ptr->GetApproximateSizes(&range, 1, &disk_size);
+  std::string memory_size_string;
+  _ptr->GetProperty("leveldb.approximate-memory-usage", &memory_size_string);
+  int memory_size = std::stoi(memory_size_string);
+  return (long)disk_size + memory_size;
 }
 
 #pragma mark - Error and Status

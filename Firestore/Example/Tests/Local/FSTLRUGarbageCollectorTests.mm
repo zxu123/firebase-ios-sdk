@@ -41,9 +41,14 @@ NS_ASSUME_NONNULL_BEGIN
   FSTTargetID _previousTargetID;
   NSUInteger _previousDocNum;
   FSTObjectValue *_testValue;
+  FSTObjectValue *_bigObjectValue;
 }
 
 - (id<FSTPersistence>)newPersistence {
+  @throw FSTAbstractMethodException();  // NOLINT
+}
+
+- (long)compactedSize:(id<FSTPersistence>)persistence {
   @throw FSTAbstractMethodException();  // NOLINT
 }
 
@@ -54,6 +59,10 @@ NS_ASSUME_NONNULL_BEGIN
   _previousTargetID = 500;
   _previousDocNum = 10;
   _testValue = FSTTestObjectValue(@{ @"baz" : @YES, @"ok" : @"fine" });
+  NSString *bigString = [@"" stringByPaddingToLength:4096 withString:@"a" startingAtIndex:0];
+  _bigObjectValue = FSTTestObjectValue(@{
+          @"BigProperty": bigString
+  });
 }
 
 - (BOOL)isTestBaseClass {
@@ -79,14 +88,22 @@ NS_ASSUME_NONNULL_BEGIN
   return FSTTestDocKey(path);
 }
 
-- (FSTDocument *)nextTestDocument {
+- (FSTDocument *)nextTestDocumentWithValue:(FSTObjectValue *)value {
   FSTDocumentKey *key = [self nextTestDocKey];
   FSTTestSnapshotVersion version = 2;
   BOOL hasMutations = NO;
-  return [FSTDocument documentWithData:_testValue
+  return [FSTDocument documentWithData:value
                                    key:key
                                version:FSTTestVersion(version)
                      hasLocalMutations:hasMutations];
+}
+
+- (FSTDocument *)nextTestDocument {
+  return [self nextTestDocumentWithValue:_testValue];
+}
+
+- (FSTDocument *)nextBigTestDocument {
+  return [self nextTestDocumentWithValue:_bigObjectValue];
 }
 
 - (void)testPickSequenceNumberPercentile {
@@ -501,14 +518,14 @@ NS_ASSUME_NONNULL_BEGIN
     [queryCache addQueryData:newestTarget];
     FSTDocumentKeySet *newestDocs = [FSTDocumentKeySet keySet];
     for (int i = 0; i < 3; i++) {
-      FSTDocument *doc = [self nextTestDocument];
+      FSTDocument *doc = [self nextBigTestDocument];
       [expectedRemoved addObject:doc.key];
       newestDocs = [newestDocs setByAddingObject:doc.key];
       [documentCache addEntry:doc];
     }
     // docs to add to the oldest target, will be retained
     for (int i = 3; i < 5; i++) {
-      FSTDocument *doc = [self nextTestDocument];
+      FSTDocument *doc = [self nextBigTestDocument];
       [expectedRetained addObject:doc.key];
       newestDocs = [newestDocs setByAddingObject:doc.key];
       newestDocsToAddToOldest = [newestDocsToAddToOldest setByAddingObject:doc.key];
@@ -619,6 +636,8 @@ NS_ASSUME_NONNULL_BEGIN
     [queryCache addPotentiallyOrphanedDocuments:docKey atSequenceNumber:sequenceNumber];
   });
 
+  long sizeBefore = [self compactedSize:persistence];
+
   // Finally, do the garbage collection, up to but not including the removal of middleTarget
   persistence.run(
       "do the garbage collection, up to but not including the removal of middleTarget", [&]() {
@@ -652,10 +671,17 @@ NS_ASSUME_NONNULL_BEGIN
         }
       });
 
+  long sizeAfter = [self compactedSize:persistence];
+  // Actual size difference will vary by persistence layer. In addtion,
+  // we need to compact the leveldb persistence to get a read on size at this small of
+  // an amount of data.
+  XCTAssertLessThan(sizeAfter, sizeBefore);
   [persistence shutdown];
 }
 
 - (void)testShouldGC {
+  if ([self isTestBaseClass]) return;
+
   id<FSTPersistence> persistence = [self newPersistence];
   id<FSTQueryCache> queryCache = [persistence queryCache];
   id<FSTRemoteDocumentCache> docCache = [persistence remoteDocumentCache];

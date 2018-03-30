@@ -166,6 +166,7 @@ const ReadOptions& LevelDbTransaction::DefaultReadOptions() {
 
 const WriteOptions& LevelDbTransaction::DefaultWriteOptions() {
   static WriteOptions options;
+  options.sync = true;
   return options;
 }
 

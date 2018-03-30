@@ -460,7 +460,7 @@ NSString *InvalidKey(const Slice &key) {
 }
 
 + (Slice)maxKey {
-  static const Slice maxKey = []() {
+  static const std::string maxKey = []() {
     std::string dest;
     OrderedCode::WriteSignedNumIncreasing(&dest, FSTComponentLabelUnknown);
     return dest;

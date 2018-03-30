@@ -14,6 +14,10 @@ NS_ASSUME_NONNULL_BEGIN
   return [FSTPersistenceTestHelpers memoryPersistence];
 }
 
+- (long)compactedSize:(id<FSTPersistence>)persistence {
+  return [persistence byteSize];
+}
+
 @end
 
 NS_ASSUME_NONNULL_END
