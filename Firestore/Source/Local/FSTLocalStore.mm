@@ -29,7 +29,6 @@
 #import "Firestore/Source/Local/FSTQueryData.h"
 #import "Firestore/Source/Local/FSTReferenceSet.h"
 #import "Firestore/Source/Local/FSTRemoteDocumentCache.h"
-#import "Firestore/Source/Local/FSTRemoteDocumentChangeBuffer.h"
 #import "Firestore/Source/Model/FSTDocument.h"
 #import "Firestore/Source/Model/FSTDocumentDictionary.h"
 #import "Firestore/Source/Model/FSTMutation.h"
@@ -223,12 +222,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
       [self.heldBatchResults addObject:batchResult];
       affected = [FSTDocumentKeySet keySet];
     } else {
-      FSTRemoteDocumentChangeBuffer *remoteDocuments =
-          [FSTRemoteDocumentChangeBuffer changeBufferWithCache:self.remoteDocumentCache];
-
-      affected = [self releaseBatchResults:@[ batchResult ] remoteDocuments:remoteDocuments];
-
-      [remoteDocuments apply];
+      affected = [self releaseBatchResults:@[ batchResult ]];
       [self.queryCache addPotentiallyOrphanedDocuments:affected
                                       atSequenceNumber:[self.listenSequence next]];
     }
@@ -270,9 +264,6 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
 
 - (FSTMaybeDocumentDictionary *)applyRemoteEvent:(FSTRemoteEvent *)remoteEvent {
   return self.persistence.run("Apply remote event", [&]() -> FSTMaybeDocumentDictionary * {
-    FSTRemoteDocumentChangeBuffer *remoteDocuments =
-        [FSTRemoteDocumentChangeBuffer changeBufferWithCache:self.remoteDocumentCache];
-
     [remoteEvent.targetChanges enumerateKeysAndObjectsUsingBlock:^(
                                    NSNumber *targetIDNumber, FSTTargetChange *change, BOOL *stop) {
       FSTTargetID targetID = targetIDNumber.intValue;
@@ -326,13 +317,13 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
       const DocumentKey &key = kv.first;
       FSTMaybeDocument *doc = kv.second;
       changedDocKeys = [changedDocKeys setByAddingObject:key];
-      FSTMaybeDocument *existingDoc = [remoteDocuments entryForKey:key];
+      FSTMaybeDocument *existingDoc = [self.remoteDocumentCache entryForKey:key];
       // Make sure we don't apply an old document version to the remote cache, though we
       // make an exception for [SnapshotVersion noVersion] which can happen for manufactured
       // events (e.g. in the case of a limbo document resolution failing).
       if (!existingDoc || [doc.version isEqual:[FSTSnapshotVersion noVersion]] ||
           [doc.version compare:existingDoc.version] != NSOrderedAscending) {
-        [remoteDocuments addEntry:doc];
+        [self.remoteDocumentCache addEntry:doc];
       } else {
         FSTLog(
             @"FSTLocalStore Ignoring outdated watch update for %s. "
@@ -357,10 +348,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
       [self.queryCache setLastRemoteSnapshotVersion:remoteVersion];
     }
 
-    FSTDocumentKeySet *releasedWriteKeys =
-        [self releaseHeldBatchResultsWithRemoteDocuments:remoteDocuments];
-
-    [remoteDocuments apply];
+    FSTDocumentKeySet *releasedWriteKeys = [self releaseHeldBatchResults];
 
     // Union the two key sets.
     __block FSTDocumentKeySet *keysToRecalc = changedDocKeys;
@@ -436,12 +424,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
     // If this was the last watch target, then we won't get any more watch snapshots, so we should
     // release any held batch results.
     if ([self.targetIDs count] == 0) {
-      FSTRemoteDocumentChangeBuffer *remoteDocuments =
-          [FSTRemoteDocumentChangeBuffer changeBufferWithCache:self.remoteDocumentCache];
-
-      [self releaseHeldBatchResultsWithRemoteDocuments:remoteDocuments];
-
-      [remoteDocuments apply];
+      [self releaseHeldBatchResults];
     }
   });
 }
@@ -479,8 +462,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
  *
  * @return the set of keys of docs that were modified by those writes.
  */
-- (FSTDocumentKeySet *)releaseHeldBatchResultsWithRemoteDocuments:
-    (FSTRemoteDocumentChangeBuffer *)remoteDocuments {
+- (FSTDocumentKeySet *)releaseHeldBatchResults {
   NSMutableArray<FSTMutationBatchResult *> *toRelease = [NSMutableArray array];
   for (FSTMutationBatchResult *batchResult in self.heldBatchResults) {
     if (![self isRemoteUpToVersion:batchResult.commitVersion]) {
@@ -493,7 +475,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
     return [FSTDocumentKeySet keySet];
   } else {
     [self.heldBatchResults removeObjectsInRange:NSMakeRange(0, toRelease.count)];
-    return [self releaseBatchResults:toRelease remoteDocuments:remoteDocuments];
+    return [self releaseBatchResults:toRelease];
   }
 }
 
@@ -508,11 +490,10 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
   return ![self isRemoteUpToVersion:version] || self.heldBatchResults.count > 0;
 }
 
-- (FSTDocumentKeySet *)releaseBatchResults:(NSArray<FSTMutationBatchResult *> *)batchResults
-                           remoteDocuments:(FSTRemoteDocumentChangeBuffer *)remoteDocuments {
+- (FSTDocumentKeySet *)releaseBatchResults:(NSArray<FSTMutationBatchResult *> *)batchResults {
   NSMutableArray<FSTMutationBatch *> *batches = [NSMutableArray array];
   for (FSTMutationBatchResult *batchResult in batchResults) {
-    [self applyBatchResult:batchResult toRemoteDocuments:remoteDocuments];
+    [self applyBatchResult:batchResult];
     [batches addObject:batchResult.batch];
   }
 
@@ -540,12 +521,11 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
   return affectedDocs;
 }
 
-- (void)applyBatchResult:(FSTMutationBatchResult *)batchResult
-       toRemoteDocuments:(FSTRemoteDocumentChangeBuffer *)remoteDocuments {
+- (void)applyBatchResult:(FSTMutationBatchResult *)batchResult {
   FSTMutationBatch *batch = batchResult.batch;
   FSTDocumentKeySet *docKeys = batch.keys;
   [docKeys enumerateObjectsUsingBlock:^(FSTDocumentKey *docKey, BOOL *stop) {
-    FSTMaybeDocument *_Nullable remoteDoc = [remoteDocuments entryForKey:docKey];
+    FSTMaybeDocument *_Nullable remoteDoc = [self.remoteDocumentCache entryForKey:docKey];
     FSTMaybeDocument *_Nullable doc = remoteDoc;
     FSTSnapshotVersion *ackVersion = batchResult.docVersions[docKey];
     FSTAssert(ackVersion, @"docVersions should contain every doc in the write.");
@@ -555,7 +535,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
         FSTAssert(!remoteDoc, @"Mutation batch %@ applied to document %@ resulted in nil.", batch,
                   remoteDoc);
       } else {
-        [remoteDocuments addEntry:doc];
+        [self.remoteDocumentCache addEntry:doc];
       }
     }
   }];
