@@ -50,6 +50,8 @@ using firebase::firestore::model::DocumentKey;
 
 NS_ASSUME_NONNULL_BEGIN
 
+static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
+
 @interface FSTLocalStore ()
 
 /** Manages our in-memory or durable persistence. */
@@ -464,6 +466,8 @@ NS_ASSUME_NONNULL_BEGIN
     if (garbage.size() > 0) {
       for (const DocumentKey &key : garbage) {
         [self.remoteDocumentCache removeEntryForKey:key];
+        FSTRemovalResult removed = [self.queryCache removeOrphanedDocument:key upperBound:kMaxListenNumber];
+        FSTAssert(removed != FSTDocumentRetained, @"Failed to remove orphaned document: %s", key.ToString().c_str());
       }
     }
   });

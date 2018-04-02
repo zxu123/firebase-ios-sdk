@@ -94,7 +94,7 @@ NS_ASSUME_NONNULL_BEGIN
       continue;
     }
     // TODO(gsoltis): the following line needs a sequence number guard
-    if ([queryCache removeOrphanedDocument:docKey upperBound:upperBound]) {
+    if ([queryCache removeOrphanedDocument:docKey upperBound:upperBound] != FSTDocumentRetained) {
       updatedDocs = [updatedDocs dictionaryByRemovingObjectForKey:docKey];
       NSLog(@"Removing %@", docKey);
       count++;

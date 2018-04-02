@@ -24,6 +24,7 @@
 #import "Firestore/Source/Local/FSTLocalWriteResult.h"
 #import "Firestore/Source/Local/FSTNoOpGarbageCollector.h"
 #import "Firestore/Source/Local/FSTPersistence.h"
+#import "Firestore/Source/Local/FSTQueryCache.h"
 #import "Firestore/Source/Local/FSTQueryData.h"
 #import "Firestore/Source/Model/FSTDocument.h"
 #import "Firestore/Source/Model/FSTDocumentKey.h"
@@ -661,6 +662,22 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   FSTAssertNotContains(@"foo/bar");
   FSTAssertNotContains(@"foo/baz");
+
+  // Now that we're adding sentinel rows, we need to verify that they are cleaned up when documents are
+  // successfully GC'd, even with the eager GC. Verify that the sentinel row for one of the docs we deleted
+  // is in fact gone.
+  id<FSTQueryCache> queryCache = [self queryCache];
+  FSTDocumentKey *key = FSTTestDocKey(@"foo/bar");
+  BOOL removed = self.localStorePersistence.run("check doc removed", [&]() -> BOOL {
+    return [queryCache removeOrphanedDocument:key upperBound:INT64_MAX] == FSTDocumentRemoved;
+  });
+  // We should have already removed this document, so we should be unable to remove it now
+  XCTAssertFalse(removed);
+}
+
+- (id<FSTQueryCache>)queryCache {
+  id result = [self.localStore performSelector:@selector(queryCache)];
+  return (id<FSTQueryCache>)result;
 }
 
 - (void)testThrowsAwayDocumentsWithUnknownTargetIDsImmediately {

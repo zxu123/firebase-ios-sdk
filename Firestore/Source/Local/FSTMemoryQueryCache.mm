@@ -176,16 +176,16 @@ NS_ASSUME_NONNULL_BEGIN
   return [self.references referencedKeysForID:targetID];
 }
 
-- (BOOL)removeOrphanedDocument:(FSTDocumentKey *)key
+- (FSTRemovalResult)removeOrphanedDocument:(FSTDocumentKey *)key
                     upperBound:(FSTListenSequenceNumber)upperBound {
   NSNumber *seq = self.orphanedDocumentSequenceNumbers[key];
   if (!seq) {
-    return YES;
+    return FSTDocumentNonexistent;
   } else if ([seq longLongValue] <= upperBound) {
     [self.orphanedDocumentSequenceNumbers removeObjectForKey:key];
-    return YES;
+    return FSTDocumentRemoved;
   } else {
-    return NO;
+    return FSTDocumentRetained;
   }
 }
 

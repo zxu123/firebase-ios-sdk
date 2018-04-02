@@ -29,6 +29,12 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+enum FSTRemovalResult {
+  FSTDocumentRemoved,
+  FSTDocumentNonexistent,
+  FSTDocumentRetained
+};
+
 /**
  * Represents cached queries received from the remote backend. This contains both a mapping between
  * queries and the documents that matched them according to the server, but also metadata about the
@@ -129,7 +135,7 @@ NS_ASSUME_NONNULL_BEGIN
 /** Removes all the keys in the query results of the given target ID. */
 - (void)removeMatchingKeysForTargetID:(FSTTargetID)targetID;
 
-- (BOOL)removeOrphanedDocument:(FSTDocumentKey *)key upperBound:(FSTListenSequenceNumber)upperBound;
+- (FSTRemovalResult)removeOrphanedDocument:(FSTDocumentKey *)key upperBound:(FSTListenSequenceNumber)upperBound;
 
 - (FSTDocumentKeySet *)matchingKeysForTargetID:(FSTTargetID)targetID;
 

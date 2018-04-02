@@ -146,7 +146,7 @@ using leveldb::Status;
         //
         // TODO(gsoltis): make this cleaner
         sequenceNumber <= upperBound &&
-        [queryCache removeOrphanedDocument:docKey upperBound:upperBound]) {
+        [queryCache removeOrphanedDocument:docKey upperBound:upperBound] == FSTDocumentRemoved) {
       [self removeEntryForKey:docKey];
       count++;
     }
