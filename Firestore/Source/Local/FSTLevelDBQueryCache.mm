@@ -55,6 +55,9 @@ FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
 }
 }
 
+@interface FSTLevelDBLRUReferenceDelegate : NSObject<FSTReferenceDelegate>
+@end
+
 @interface FSTLevelDBQueryCache ()
 
 /** A write-through cached copy of the metadata for the query cache. */

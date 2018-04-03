@@ -18,9 +18,11 @@
 
 #include <unordered_map>
 
+#include "absl/memory/memory.h"
 #import "Firestore/Source/Local/FSTMemoryMutationQueue.h"
 #import "Firestore/Source/Local/FSTMemoryQueryCache.h"
 #import "Firestore/Source/Local/FSTMemoryRemoteDocumentCache.h"
+#import "Firestore/Source/Local/FSTReferenceSet.h"
 #import "Firestore/Source/Util/FSTAssert.h"
 
 #import "FSTDocument.h"
@@ -28,6 +30,7 @@
 #include "Firestore/core/src/firebase/firestore/auth/user.h"
 #include "Firestore/core/src/firebase/firestore/model/database_id.h"
 #include "Firestore/core/src/firebase/firestore/model/resource_path.h"
+#import "FSTEagerGarbageCollector.h"
 
 using firebase::firestore::auth::HashUser;
 using firebase::firestore::auth::User;
@@ -172,6 +175,39 @@ NS_ASSUME_NONNULL_BEGIN
     bytes += [it->second byteSize];
   }
   return bytes;
+}
+
+@end
+
+@implementation FSTMemoryEagerReferenceDelegate {
+  FSTReferenceSet *_references;
+  FSTEagerGarbageCollector *_gc;
+  std::unique_ptr<std::set<FSTDocumentKey *> > _orphaned;
+  FSTMemoryPersistence *_persistence;
+  FSTMemoryRemoteDocumentCache *_docCache;
+}
+
+- (instancetype)initWithReferenceSet:(FSTReferenceSet *)references
+                    garbageCollector:(FSTEagerGarbageCollector *)gc {
+  if (self = [super init]) {
+    _references = references;
+    _gc = gc;
+  }
+  return self;
+}
+
+- (void)startTransaction {
+  _orphaned = absl::make_unique<std::set<FSTDocumentKey *> >();
+}
+
+- (void)commitTransaction {
+  for (auto it = _orphaned->begin(); it != _orphaned->end(); ++it) {
+    if (![_references containsKey:*it]) {
+      [_gc addPotentialGarbageKey:*it];
+    }
+  }
+  _orphaned.reset();
+  // TODO(gsoltis): collectGarbage here? or enumerate
 }
 
 @end

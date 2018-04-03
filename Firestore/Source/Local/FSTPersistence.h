@@ -16,9 +16,11 @@
 
 #import <Foundation/Foundation.h>
 
+#import "Firestore/Source/Core/FSTTypes.h"
 #import "Firestore/Source/Util/FSTAssert.h"
 #include "Firestore/core/src/firebase/firestore/auth/user.h"
 
+@class FSTDocumentKey;
 @protocol FSTMutationQueue;
 @protocol FSTQueryCache;
 @protocol FSTRemoteDocumentCache;
@@ -55,6 +57,7 @@ NS_ASSUME_NONNULL_BEGIN
  * FSTPersistence. The cost is that the FSTLocalStore needs to be slightly careful about the order
  * of its reads and writes in order to avoid relying on being able to read back uncommitted writes.
  */
+@protocol FSTReferenceDelegate;
 struct FSTTransactionRunner;
 @protocol FSTPersistence <NSObject>
 
@@ -89,6 +92,8 @@ struct FSTTransactionRunner;
 
 @property(nonatomic, readonly, assign) const FSTTransactionRunner &run;
 
+@property(nonatomic, readonly, strong) id<FSTReferenceDelegate> referenceDelegate;
+
 @end
 
 @protocol FSTTransactional
@@ -98,6 +103,23 @@ struct FSTTransactionRunner;
 - (void)commitTransaction;
 
 @end
+
+@protocol FSTReferenceDelegate
+
+- (void)addReference:(FSTDocumentKey *)key
+              target:(FSTTargetID)targetID
+      sequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
+
+- (void)removeReference:(FSTDocumentKey *)key
+                 target:(FSTTargetID)targetID
+         sequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
+
+- (void)startTransaction;
+
+- (void)commitTransaction;
+
+@end
+
 
 struct FSTTransactionRunner {
 // Intentionally disable nullability checking for this function. We cannot properly annotate

@@ -21,6 +21,7 @@
 
 @class FSTMaybeDocument;
 @class FSTObjectValue;
+@class FSTReferenceSet;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -39,6 +40,15 @@ NS_ASSUME_NONNULL_BEGIN
 // This size calculation is specific to estimating in-memory size of paths.
 // It should not be used for e.g. index entry sizing.
 + (size_t)pathSizeInMemory:(const firebase::firestore::model::ResourcePath &)path;
+
+@end
+
+@interface FSTMemoryLRUReferenceDelegate : NSObject <FSTReferenceDelegate>
+@end
+
+@interface FSTMemoryEagerReferenceDelegate : NSObject <FSTReferenceDelegate>
+
+- (instancetype)initWithReferenceSet:(FSTReferenceSet *)references;
 
 @end
 

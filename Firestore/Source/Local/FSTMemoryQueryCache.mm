@@ -52,7 +52,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
-@implementation FSTMemoryQueryCache
+@implementation FSTMemoryQueryCache {
+  FSTMemoryPersistence *_persistence;
+}
 
 - (instancetype)init {
   if (self = [super init]) {
@@ -207,9 +209,12 @@ NS_ASSUME_NONNULL_BEGIN
       [self.references enumerateReferencesForID:queryData.targetID block:^(FSTDocumentReference *ref, BOOL *stop) {
         [self.references removeReference:ref];
         FSTDocumentKey* key = ref.key;
-        if (![self.references containsKey:key] && ![reset.documents containsObject:key]) {
+        [_persistence.referenceDelegate removeReference:key
+                                                 target:queryData.targetID
+                                         sequenceNumber:queryData.sequenceNumber];
+        /*if (![self.references containsKey:key] && ![reset.documents containsObject:key]) {
           orphaned.insert(ref.key);
-        }
+        }*/
       }];
 
       for (FSTDocumentKey *key in [reset.documents objectEnumerator]) {

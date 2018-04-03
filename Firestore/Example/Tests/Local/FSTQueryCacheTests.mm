@@ -432,13 +432,13 @@ NS_ASSUME_NONNULL_BEGIN
   FSTDocumentKeySet *keys = [FSTDocumentKeySet keySet];
   keys = [keys setByAddingObject:key];
 
-  [self.queryCache addMatchingKeys:keys forTargetID:targetID atSequenceNumber:sequenceNumber];
+  //[self.queryCache addMatchingKeys:keys forTargetID:targetID atSequenceNumber:sequenceNumber];
 }
 
 - (void)removeMatchingKey:(const DocumentKey &)key forTargetID:(FSTTargetID)targetID {
   FSTDocumentKeySet *keys = [FSTDocumentKeySet keySet];
   keys = [keys setByAddingObject:key];
-  [self.queryCache removeMatchingKeys:keys forTargetID:targetID atSequenceNumber:0];
+  //[self.queryCache removeMatchingKeys:keys forTargetID:targetID atSequenceNumber:0];
 }
 
 @end

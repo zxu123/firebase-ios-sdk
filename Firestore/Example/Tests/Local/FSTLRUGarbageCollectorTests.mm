@@ -142,7 +142,7 @@ NS_ASSUME_NONNULL_BEGIN
     [persistence shutdown];
   }
 }
-
+/*
 - (void)testSequenceNumberForQueryCount {
   if ([self isTestBaseClass]) return;
 
@@ -712,7 +712,7 @@ NS_ASSUME_NONNULL_BEGIN
   // Enough time has passed, but the stored byte size is too small
   XCTAssertFalse([gc shouldGCAt:nowMs + 501 currentSize:10]);
 }
-
+*/
 @end
 
 NS_ASSUME_NONNULL_END
