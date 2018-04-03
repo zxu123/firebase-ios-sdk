@@ -43,7 +43,6 @@
 #include "Firestore/core/src/firebase/firestore/model/document_key.h"
 
 using firebase::firestore::auth::User;
-using firebase::firestore::model::DocumentKey;
 using firebase::firestore::core::TargetIdGenerator;
 using firebase::firestore::model::DocumentKey;
 
@@ -264,9 +263,9 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
 
 - (FSTMaybeDocumentDictionary *)applyRemoteEvent:(FSTRemoteEvent *)remoteEvent {
   return self.persistence.run("Apply remote event", [&]() -> FSTMaybeDocumentDictionary * {
+    __block std::set<FSTDocumentKey *> orphaned;
     [remoteEvent.targetChanges enumerateKeysAndObjectsUsingBlock:^(
                                    NSNumber *targetIDNumber, FSTTargetChange *change, BOOL *stop) {
-      FSTTargetID targetID = targetIDNumber.intValue;
 
       // Do not ref/unref unassigned targetIDs - it may lead to leaks.
       FSTQueryData *queryData = self.targetIDs[targetIDNumber];
@@ -283,10 +282,12 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
                                                        resumeToken:resumeToken
                                                     sequenceNumber:[self.listenSequence next]];
         self.targetIDs[targetIDNumber] = queryData;
-        [self.queryCache addQueryData:queryData];
+        [self.queryCache updateQueryData:queryData];
       }
 
-      FSTTargetMapping *mapping = change.mapping;
+      [self.queryCache handleTargetChange:change queryData:queryData orphaned:orphaned];
+
+      /*FSTTargetMapping *mapping = change.mapping;
       FSTListenSequenceNumber sequenceNumber = queryData.sequenceNumber;
       if (mapping) {
         // First make sure that all references are deleted.
@@ -308,8 +309,12 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
         } else {
           FSTFail(@"Unknown mapping type: %@", mapping);
         }
-      }
+      }*/
     }];
+
+    for (auto it = orphaned.begin(); it != orphaned.end(); ++it) {
+      [self.garbageCollector addPotentialGarbageKey:*it];
+    }
 
     // TODO(klimt): This could probably be an NSMutableDictionary.
     FSTDocumentKeySet *changedDocKeys = [FSTDocumentKeySet keySet];

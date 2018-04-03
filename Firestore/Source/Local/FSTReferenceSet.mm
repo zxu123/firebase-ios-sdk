@@ -106,22 +106,25 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)removeReference:(FSTDocumentReference *)reference {
   self.referencesByKey = [self.referencesByKey setByRemovingObject:reference];
   self.referencesByID = [self.referencesByID setByRemovingObject:reference];
-  [self.garbageCollector addPotentialGarbageKey:reference.key];
+  if (self.garbageCollector) {
+    [self.garbageCollector addPotentialGarbageKey:reference.key];
+  }
 }
 
 - (FSTDocumentKeySet *)referencedKeysForID:(int)ID {
-  FSTDocumentReference *start =
-      [[FSTDocumentReference alloc] initWithKey:DocumentKey::Empty() ID:ID];
-  FSTDocumentReference *end =
-      [[FSTDocumentReference alloc] initWithKey:DocumentKey::Empty() ID:(ID + 1)];
-
   __block FSTDocumentKeySet *keys = [FSTDocumentKeySet keySet];
-  [self.referencesByID enumerateObjectsFrom:start
-                                         to:end
-                                 usingBlock:^(FSTDocumentReference *reference, BOOL *stop) {
-                                   keys = [keys setByAddingObject:reference.key];
-                                 }];
+  [self enumerateReferencesForID:ID block:^(FSTDocumentReference *reference, BOOL *stop) {
+    keys = [keys setByAddingObject:reference.key];
+  }];
   return keys;
+}
+
+- (void)enumerateReferencesForID:(int)ID block:(void (^)(FSTDocumentReference *ref, BOOL *stop))block {
+  FSTDocumentReference *start =
+          [[FSTDocumentReference alloc] initWithKey:DocumentKey::Empty() ID:ID];
+  FSTDocumentReference *end =
+          [[FSTDocumentReference alloc] initWithKey:DocumentKey::Empty() ID:(ID + 1)];
+  [self.referencesByID enumerateObjectsFrom:start to:end usingBlock:block];
 }
 
 - (BOOL)containsKey:(const DocumentKey &)key {

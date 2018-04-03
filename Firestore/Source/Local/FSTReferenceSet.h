@@ -58,11 +58,15 @@ NS_ASSUME_NONNULL_BEGIN
 /** Clears all references with a given ID. Calls -removeReferenceToKey: for each key removed. */
 - (void)removeReferencesForID:(int)ID;
 
+- (void)removeReference:(FSTDocumentReference *)reference;
+
 /** Clears all references for all IDs. */
 - (void)removeAllReferences;
 
 /** Returns all of the document keys that have had references added for the given ID. */
 - (FSTDocumentKeySet *)referencedKeysForID:(int)ID;
+
+- (void)enumerateReferencesForID:(int)ID block:(void (^)(FSTDocumentReference *ref, BOOL *stop))block;
 
 @end
 

@@ -22,8 +22,12 @@
 #import "Firestore/Source/Local/FSTQueryData.h"
 #import "Firestore/Source/Local/FSTReferenceSet.h"
 #import "Firestore/Source/Model/FSTDocumentKey.h"
+#import "Firestore/Source/Remote/FSTRemoteEvent.h"
 
 #include "Firestore/core/src/firebase/firestore/model/document_key.h"
+#import "FSTDocumentReference.h"
+
+using firebase::firestore::model::DocumentKey;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -169,8 +173,11 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (void)removeMatchingKeysForTargetID:(FSTTargetID)targetID {
+
   [self.references removeReferencesForID:targetID];
 }
+
+
 
 - (FSTDocumentKeySet *)matchingKeysForTargetID:(FSTTargetID)targetID {
   return [self.references referencedKeysForID:targetID];
@@ -187,6 +194,49 @@ NS_ASSUME_NONNULL_BEGIN
   } else {
     return FSTDocumentRetained;
   }
+}
+
+- (nullable FSTQueryData *)handleTargetChange:(FSTTargetChange *)change
+                                    queryData:(FSTQueryData *)queryData
+                                     orphaned:(std::set<FSTDocumentKey *> &)orphaned {
+  FSTTargetMapping *mapping = change.mapping;
+  if (mapping) {
+    // First make sure that all references are deleted.
+    if ([mapping isKindOfClass:[FSTResetMapping class]]) {
+      FSTResetMapping *reset = (FSTResetMapping *)mapping;
+      [self.references enumerateReferencesForID:queryData.targetID block:^(FSTDocumentReference *ref, BOOL *stop) {
+        [self.references removeReference:ref];
+        FSTDocumentKey* key = ref.key;
+        if (![self.references containsKey:key] && ![reset.documents containsObject:key]) {
+          orphaned.insert(ref.key);
+        }
+      }];
+
+      for (FSTDocumentKey *key in [reset.documents objectEnumerator]) {
+        [self.orphanedDocumentSequenceNumbers removeObjectForKey:key];
+        orphaned.erase(key);
+        [self.references addReferenceToKey:key forID:queryData.targetID];
+      }
+    } else if ([mapping isKindOfClass:[FSTUpdateMapping class]]) {
+      FSTUpdateMapping *update = (FSTUpdateMapping *)mapping;
+      for (FSTDocumentKey *key in [update.removedDocuments objectEnumerator]) {
+        [self.references removeReferenceToKey:key forID:queryData.targetID];
+        // TODO(gsoltis): can the same document be added and removed in the same mapping update?
+        if (![self.references containsKey:key]) {
+          orphaned.insert(key);
+        }
+      }
+
+      for (FSTDocumentKey *key in [update.addedDocuments objectEnumerator]) {
+        [self.orphanedDocumentSequenceNumbers removeObjectForKey:key];
+        orphaned.erase(key);
+        [self.references addReferenceToKey:key forID:queryData.targetID];
+      }
+    } else {
+      FSTFail(@"Unknown mapping type: %@", mapping);
+    }
+  }
+  return queryData;
 }
 
 #pragma mark - Sizing
@@ -216,7 +266,7 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (void)setGarbageCollector:(nullable id<FSTGarbageCollector>)garbageCollector {
-  self.references.garbageCollector = garbageCollector;
+  //self.references.garbageCollector = garbageCollector;
 }
 
 - (BOOL)containsKey:(const firebase::firestore::model::DocumentKey &)key {

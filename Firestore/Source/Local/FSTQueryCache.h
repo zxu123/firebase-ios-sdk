@@ -25,7 +25,7 @@
 @class FSTQuery;
 @class FSTQueryData;
 @class FSTSnapshotVersion;
-@class FSTTargetMapping;
+@class FSTTargetChange;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -140,9 +140,9 @@ enum FSTRemovalResult {
 - (FSTDocumentKeySet *)matchingKeysForTargetID:(FSTTargetID)targetID;
 
 // TODO(gsoltis): Think about:
-- (void)handleMapping:(FSTTargetID)targetId
-              mapping:(FSTTargetMapping *)mapping
-             orphaned:(std::set<FSTDocumentKey *> *)orphaned;
+- (nullable FSTQueryData *)handleTargetChange:(FSTTargetChange *)change
+                                     queryData:(FSTQueryData *)queryData
+                                     orphaned:(std::set<FSTDocumentKey *> &)orphaned;
 
 @end
 
