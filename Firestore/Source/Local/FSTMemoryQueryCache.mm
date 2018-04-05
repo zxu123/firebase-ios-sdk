@@ -160,10 +160,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)addMatchingKeys:(FSTDocumentKeySet *)keys
             forTargetID:(FSTTargetID)targetID
-       atSequenceNumber:(__unused FSTListenSequenceNumber)sequenceNumber {
+       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
   // We're adding docs to a target, we no longer care that they were mutated.
   for (FSTDocumentKey *key in [keys objectEnumerator]) {
-    [self.orphanedDocumentSequenceNumbers removeObjectForKey:key];
+    [_persistence.referenceDelegate addReference:key
+                                          target:targetID
+                                  sequenceNumber:sequenceNumber];
   }
   [self.references addReferencesToKeys:keys forID:targetID];
 }
@@ -172,7 +174,11 @@ NS_ASSUME_NONNULL_BEGIN
                forTargetID:(FSTTargetID)targetID
           atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
   [self.references removeReferencesToKeys:keys forID:targetID];
-  [self addPotentiallyOrphanedDocuments:keys atSequenceNumber:sequenceNumber];
+  [keys enumerateObjectsUsingBlock:^(FSTDocumentKey *key, BOOL *stop) {
+    [_persistence.referenceDelegate removeReference:key
+                                             target:targetID
+                                     sequenceNumber:sequenceNumber];
+  }];
 }
 
 - (void)removeMatchingKeysForTargetID:(FSTTargetID)targetID {

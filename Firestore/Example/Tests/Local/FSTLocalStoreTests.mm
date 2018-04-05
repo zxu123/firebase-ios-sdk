@@ -164,7 +164,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 }
 
 - (void)collectGarbage {
-  [self.localStore collectGarbage];
+  return;
 }
 
 /** Asserts that the last target ID is the given number. */
@@ -729,6 +729,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTAssertContains(FSTTestDoc("foo/bar", 1, @{@"foo" : @"bar"}, NO));
   FSTAssertContains(FSTTestDoc("foo/baz", 2, @{@"foo" : @"baz"}, NO));
 
+  // Is it possible to get local changes that are not in the mutation queue?
   [self notifyLocalViewChanges:FSTTestViewChanges(query, @[], @[ @"foo/bar", @"foo/baz" ])];
   [self collectGarbage];
 

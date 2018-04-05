@@ -114,9 +114,9 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
     [_persistence.referenceDelegate addReferenceSet:_localViewReferences];
 
     _garbageCollector = garbageCollector;
-    [_garbageCollector addGarbageSource:_queryCache];
+    /*[_garbageCollector addGarbageSource:_queryCache];
     [_garbageCollector addGarbageSource:_localViewReferences];
-    [_garbageCollector addGarbageSource:_mutationQueue];
+    [_garbageCollector addGarbageSource:_mutationQueue];*/
 
     _targetIDs = [NSMutableDictionary dictionary];
     _heldBatchResults = [NSMutableArray array];
@@ -223,14 +223,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
       affected = [FSTDocumentKeySet keySet];
     } else {
       affected = [self releaseBatchResults:@[ batchResult ]];
-      //[self.queryCache addPotentiallyOrphanedDocuments:affected
-      //                                atSequenceNumber:[self.listenSequence next]];
     }
-    // affected will be empty if we held the batch results, but in principle we want to unref anything we
-    // released, regardless of why. So, keep this outside of the above if block.
-    /*[affected enumerateObjectsUsingBlock:^(FSTDocumentKey *key, BOOL *stop) {
-      [self->_persistence.referenceDelegate removeMutationReference:key];
-    }];*/
 
     [self.mutationQueue performConsistencyCheck];
 
@@ -291,10 +284,11 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
         [self.queryCache updateQueryData:queryData];
       }
 
-      [self.queryCache handleTargetChange:change queryData:queryData orphaned:orphaned];
+      //[self.queryCache handleTargetChange:change queryData:queryData orphaned:orphaned];
 
-      /*FSTTargetMapping *mapping = change.mapping;
+      FSTTargetMapping *mapping = change.mapping;
       FSTListenSequenceNumber sequenceNumber = queryData.sequenceNumber;
+      FSTTargetID targetID = queryData.targetID;
       if (mapping) {
         // First make sure that all references are deleted.
         if ([mapping isKindOfClass:[FSTResetMapping class]]) {
@@ -315,7 +309,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
         } else {
           FSTFail(@"Unknown mapping type: %@", mapping);
         }
-      }*/
+      }
     }];
 
     FSTAssert(orphaned.size() == 0, @"Expected to not use orphaned");
@@ -383,6 +377,9 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
       FSTQueryData *queryData = [self.queryCache queryDataForQuery:view.query];
       FSTAssert(queryData, @"Local view changes contain unallocated query.");
       FSTTargetID targetID = queryData.targetID;
+      [view.removedKeys enumerateObjectsUsingBlock:^(FSTDocumentKey *key, BOOL *stop) {
+        [self->_persistence.referenceDelegate removeMutationReference:key];
+      }];
       [localViewReferences addReferencesToKeys:view.addedKeys forID:targetID];
       [localViewReferences removeReferencesToKeys:view.removedKeys forID:targetID];
     }
