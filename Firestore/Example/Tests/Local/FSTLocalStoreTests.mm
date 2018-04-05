@@ -572,19 +572,21 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 - (void)testCollectsGarbageAfterAcknowledgedMutation {
   if ([self isTestBaseClass]) return;
 
-  //FSTQuery *query = FSTTestQuery("foo");
-  //[self allocateQuery:query];
-  //FSTAssertTargetID(2);
+  FSTQuery *query = FSTTestQuery("foo");
+  [self allocateQuery:query];
+  FSTAssertTargetID(2);
 
   // Applies to non-existent target
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 0, @{@"foo" : @"old"}, NO),
-                                                  @[ @1 ], @[])];
+                                                  @[ @2 ], @[])];
   // This is odd, we don't have the document cached. cache partial?
   [self writeMutation:FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})];
+  [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 3, @{@"foo" : @"bar"}, NO),
+          @[ ], @[ @2 ])];
   [self writeMutation:FSTTestSetMutation(@"foo/bah", @{@"foo" : @"bah"})];
   [self writeMutation:FSTTestDeleteMutation(@"foo/baz")];
   [self collectGarbage];
-  FSTAssertContains(FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, YES));
+  FSTAssertContains(FSTTestDoc("foo/bar", 3, @{@"foo" : @"bar"}, YES));
   FSTAssertContains(FSTTestDoc("foo/bah", 0, @{@"foo" : @"bah"}, YES));
   FSTAssertContains(FSTTestDeletedDoc("foo/baz", 0));
 

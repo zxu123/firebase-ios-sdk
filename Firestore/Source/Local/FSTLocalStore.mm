@@ -223,9 +223,14 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
       affected = [FSTDocumentKeySet keySet];
     } else {
       affected = [self releaseBatchResults:@[ batchResult ]];
-      [self.queryCache addPotentiallyOrphanedDocuments:affected
-                                      atSequenceNumber:[self.listenSequence next]];
+      //[self.queryCache addPotentiallyOrphanedDocuments:affected
+      //                                atSequenceNumber:[self.listenSequence next]];
     }
+    // affected will be empty if we held the batch results, but in principle we want to unref anything we
+    // released, regardless of why. So, keep this outside of the above if block.
+    [affected enumerateObjectsUsingBlock:^(FSTDocumentKey *key, BOOL *stop) {
+      [self->_persistence.referenceDelegate removeMutationReference:key];
+    }];
 
     [self.mutationQueue performConsistencyCheck];
 
