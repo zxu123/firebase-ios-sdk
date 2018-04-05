@@ -157,9 +157,10 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   self.lastChanges = [self.localStore rejectBatchID:batch.batchID];
 }
 
-- (void)allocateQuery:(FSTQuery *)query {
+- (FSTTargetID)allocateQuery:(FSTQuery *)query {
   FSTQueryData *queryData = [self.localStore allocateQuery:query];
   self.lastTargetID = queryData.targetID;
+  return queryData.targetID;
 }
 
 - (void)collectGarbage {
@@ -240,7 +241,8 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   [self acknowledgeMutationWithVersion:0];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, NO) ]);
-  FSTAssertContains(FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, NO));
+  // Nothing is pinning this anymore, as it has been acknowledged and there are no targets active.
+  FSTAssertNotContains(@"foo/bar");
 }
 
 - (void)testHandlesSetMutationThenDocument {
@@ -261,7 +263,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   // Start a query that requires acks to be held.
   FSTQuery *query = FSTTestQuery("foo");
-  [self allocateQuery:query];
+  FSTTargetID targetID = [self allocateQuery:query];
 
   [self writeMutation:FSTTestSetMutation(@"foo/bar", @{@"foo" : @"bar"})];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, YES) ]);
@@ -281,7 +283,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTAssertNotContains(@"bar/baz");
 
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(
-                             FSTTestDoc("foo/bar", 2, @{@"it" : @"changed"}, NO), @[ @1 ], @[])];
+                             FSTTestDoc("foo/bar", 2, @{@"it" : @"changed"}, NO), @[ @(targetID) ], @[])];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 2, @{@"it" : @"changed"}, NO) ]);
   FSTAssertContains(FSTTestDoc("foo/bar", 2, @{@"it" : @"changed"}, NO));
   FSTAssertNotContains(@"bar/baz");
@@ -290,17 +292,25 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 - (void)testHandlesDeletedDocumentThenSetMutationThenAck {
   if ([self isTestBaseClass]) return;
 
-  [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDeletedDoc("foo/bar", 2), @[ @1 ], @[])];
+  FSTQuery *query = FSTTestQuery("foo");
+  FSTTargetID targetID = [self allocateQuery:query];
+
+  [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDeletedDoc("foo/bar", 2), @[ @(targetID) ], @[])];
   FSTAssertRemoved(@[ @"foo/bar" ]);
   FSTAssertContains(FSTTestDeletedDoc("foo/bar", 2));
 
   [self writeMutation:FSTTestSetMutation(@"foo/bar", @{@"foo" : @"bar"})];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, YES) ]);
   FSTAssertContains(FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, YES));
+  // Can now remove the target, since we have a mutation pinning the document
+  [self.localStore releaseQuery:query];
+  // Verify we didn't lose anything
+  FSTAssertContains(FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, YES));
 
   [self acknowledgeMutationWithVersion:3];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, NO) ]);
-  FSTAssertContains(FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, NO));
+  // It has been acknowledged, and should no longer be retained as there is no target and mutation
+  FSTAssertNotContains(@"foo/bar");
 }
 
 - (void)testHandlesSetMutationThenDeletedDocument {
@@ -317,8 +327,11 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 - (void)testHandlesDocumentThenSetMutationThenAckThenDocument {
   if ([self isTestBaseClass]) return;
 
+  FSTQuery *query = FSTTestQuery("foo");
+  FSTTargetID targetID = [self allocateQuery:query];
+
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 2, @{@"it" : @"base"}, NO),
-                                                  @[ @1 ], @[])];
+                                                  @[ @(targetID) ], @[])];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 2, @{@"it" : @"base"}, NO) ]);
   FSTAssertContains(FSTTestDoc("foo/bar", 2, @{@"it" : @"base"}, NO));
 
@@ -327,11 +340,12 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTAssertContains(FSTTestDoc("foo/bar", 2, @{@"foo" : @"bar"}, YES));
 
   [self acknowledgeMutationWithVersion:3];
-  FSTAssertChanged(@[ FSTTestDoc("foo/bar", 2, @{@"foo" : @"bar"}, NO) ]);
-  FSTAssertContains(FSTTestDoc("foo/bar", 2, @{@"foo" : @"bar"}, NO));
+  // we haven't seen the remote event yet, so the write is still held.
+  FSTAssertChanged(@[]);
+  FSTAssertContains(FSTTestDoc("foo/bar", 2, @{@"foo" : @"bar"}, YES));
 
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(
-                             FSTTestDoc("foo/bar", 3, @{@"it" : @"changed"}, NO), @[ @1 ], @[])];
+                             FSTTestDoc("foo/bar", 3, @{@"it" : @"changed"}, NO), @[ @(targetID) ], @[])];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 3, @{@"it" : @"changed"}, NO) ]);
   FSTAssertContains(FSTTestDoc("foo/bar", 3, @{@"it" : @"changed"}, NO));
 }
@@ -355,12 +369,22 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTAssertRemoved(@[ @"foo/bar" ]);
   FSTAssertNotContains(@"foo/bar");
 
+  FSTQuery *query = FSTTestQuery("foo");
+  FSTTargetID targetID = [self allocateQuery:query];
+
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 1, @{@"it" : @"base"}, NO),
-                                                  @[ @1 ], @[])];
+                                                  @[ @(targetID) ], @[])];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 1, @{@"foo" : @"bar", @"it" : @"base"}, YES) ]);
   FSTAssertContains(FSTTestDoc("foo/bar", 1, @{@"foo" : @"bar", @"it" : @"base"}, YES));
 
   [self acknowledgeMutationWithVersion:2];
+  // We still haven't seen the remote events for the patch, so the local changes remain, and there are no changes
+  FSTAssertChanged(@[]);
+  FSTAssertContains(FSTTestDoc("foo/bar", 1, @{@"foo" : @"bar", @"it" : @"base"}, YES));
+
+  [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 2, @{@"foo": @"bar", @"it" : @"base"}, NO),
+          @[], @[])];
+
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 1, @{@"foo" : @"bar", @"it" : @"base"}, NO) ]);
   FSTAssertContains(FSTTestDoc("foo/bar", 1, @{@"foo" : @"bar", @"it" : @"base"}, NO));
 }
@@ -376,8 +400,11 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTAssertRemoved(@[ @"foo/bar" ]);
   FSTAssertNotContains(@"foo/bar");
 
+  FSTQuery *query = FSTTestQuery("foo");
+  FSTTargetID targetID = [self allocateQuery:query];
+
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 1, @{@"it" : @"base"}, NO),
-                                                  @[ @1 ], @[])];
+                                                  @[ @(targetID) ], @[])];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 1, @{@"it" : @"base"}, NO) ]);
   FSTAssertContains(FSTTestDoc("foo/bar", 1, @{@"it" : @"base"}, NO));
 }
@@ -391,14 +418,18 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   [self acknowledgeMutationWithVersion:1];
   FSTAssertRemoved(@[ @"foo/bar" ]);
-  FSTAssertContains(FSTTestDeletedDoc("foo/bar", 0));
+  // There's no target pinning the doc, and we've ack'd the mutation.
+  FSTAssertNotContains(@"foo/bar");
 }
 
 - (void)testHandlesDocumentThenDeleteMutationThenAck {
   if ([self isTestBaseClass]) return;
 
+  FSTQuery *query = FSTTestQuery("foo");
+  FSTTargetID targetID = [self allocateQuery:query];
+
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 1, @{@"it" : @"base"}, NO),
-                                                  @[ @1 ], @[])];
+                                                  @[ @(targetID) ], @[])];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 1, @{@"it" : @"base"}, NO) ]);
   FSTAssertContains(FSTTestDoc("foo/bar", 1, @{@"it" : @"base"}, NO));
 
@@ -406,42 +437,56 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTAssertRemoved(@[ @"foo/bar" ]);
   FSTAssertContains(FSTTestDeletedDoc("foo/bar", 0));
 
+  // Remove the target so only the mutation is pinning the document
+  [self.localStore releaseQuery:query];
   [self acknowledgeMutationWithVersion:2];
   FSTAssertRemoved(@[ @"foo/bar" ]);
-  FSTAssertContains(FSTTestDeletedDoc("foo/bar", 0));
+  // Neither the target nor the mutation pin the document, it should be gone.
+  FSTAssertNotContains(@"foo/bar");
 }
 
 - (void)testHandlesDeleteMutationThenDocumentThenAck {
   if ([self isTestBaseClass]) return;
 
+  FSTQuery *query = FSTTestQuery("foo");
+  FSTTargetID targetID = [self allocateQuery:query];
+
   [self writeMutation:FSTTestDeleteMutation(@"foo/bar")];
   FSTAssertRemoved(@[ @"foo/bar" ]);
   FSTAssertContains(FSTTestDeletedDoc("foo/bar", 0));
 
+  // Add the document to a target so it will remain in persistence even when ack'd
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 1, @{@"it" : @"base"}, NO),
-                                                  @[ @1 ], @[])];
+                                                  @[ @(targetID) ], @[])];
   FSTAssertRemoved(@[ @"foo/bar" ]);
   FSTAssertContains(FSTTestDeletedDoc("foo/bar", 0));
 
+  // Don't need to keep it pinned anymore
+  [self.localStore releaseQuery:query];
+
   [self acknowledgeMutationWithVersion:2];
   FSTAssertRemoved(@[ @"foo/bar" ]);
-  FSTAssertContains(FSTTestDeletedDoc("foo/bar", 0));
+  // The doc is not pinned in a target and we've acknowledged the mutation. It shouldn't exist anymore.
+  FSTAssertNotContains(@"foo/bar");
 }
 
 - (void)testHandlesDocumentThenDeletedDocumentThenDocument {
   if ([self isTestBaseClass]) return;
 
+  FSTQuery *query = FSTTestQuery("foo");
+  FSTTargetID targetID = [self allocateQuery:query];
+
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 1, @{@"it" : @"base"}, NO),
-                                                  @[ @1 ], @[])];
+                                                  @[ @(targetID) ], @[])];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 1, @{@"it" : @"base"}, NO) ]);
   FSTAssertContains(FSTTestDoc("foo/bar", 1, @{@"it" : @"base"}, NO));
 
-  [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDeletedDoc("foo/bar", 2), @[ @1 ], @[])];
+  [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDeletedDoc("foo/bar", 2), @[ @(targetID) ], @[])];
   FSTAssertRemoved(@[ @"foo/bar" ]);
   FSTAssertContains(FSTTestDeletedDoc("foo/bar", 2));
 
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(
-                             FSTTestDoc("foo/bar", 3, @{@"it" : @"changed"}, NO), @[ @1 ], @[])];
+                             FSTTestDoc("foo/bar", 3, @{@"it" : @"changed"}, NO), @[ @(targetID) ], @[])];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 3, @{@"it" : @"changed"}, NO) ]);
   FSTAssertContains(FSTTestDoc("foo/bar", 3, @{@"it" : @"changed"}, NO));
 }
@@ -468,7 +513,8 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   [self acknowledgeMutationWithVersion:3];  // patch mutation
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 1, @{@"foo" : @"bar"}, NO) ]);
-  FSTAssertContains(FSTTestDoc("foo/bar", 1, @{@"foo" : @"bar"}, NO));
+  // we've ack'd all of the mutations, nothing is keeping this pinned anymore
+  FSTAssertNotContains(@"foo/bar");
 }
 
 - (void)testHandlesSetMutationAndPatchMutationTogether {
@@ -487,15 +533,19 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   if ([self isTestBaseClass]) return;
 
   [self writeMutation:FSTTestSetMutation(@"foo/bar", @{@"foo" : @"old"})];
+  FSTAssertContains(FSTTestDoc("foo/bar", 0, @{@"foo" : @"old"}, YES));
   [self acknowledgeMutationWithVersion:1];
-  FSTAssertContains(FSTTestDoc("foo/bar", 0, @{@"foo" : @"old"}, NO));
+  FSTAssertNotContains(@"foo/bar");
 
   [self writeMutation:FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})];
-  FSTAssertContains(FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, YES));
+  // A blind patch is not visible in the cache
+  FSTAssertNotContains(@"foo/bar");
+  //FSTAssertContains(FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, YES));
 
   [self rejectMutation];
-  FSTAssertChanged(@[ FSTTestDoc("foo/bar", 0, @{@"foo" : @"old"}, NO) ]);
-  FSTAssertContains(FSTTestDoc("foo/bar", 0, @{@"foo" : @"old"}, NO));
+  FSTAssertNotContains(@"foo/bar");
+  //FSTAssertChanged(@[ FSTTestDoc("foo/bar", 0, @{@"foo" : @"old"}, NO) ]);
+  //FSTAssertContains(FSTTestDoc("foo/bar", 0, @{@"foo" : @"old"}, NO));
 }
 
 - (void)testHandlesSetMutationsAndPatchMutationOfJustOneTogether {
@@ -532,7 +582,8 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   [self acknowledgeMutationWithVersion:3];  // patch mutation
   FSTAssertRemoved(@[ @"foo/bar" ]);
-  FSTAssertContains(FSTTestDeletedDoc("foo/bar", 0));
+  // There are no more pending mutations, the doc has been dropped
+  FSTAssertNotContains(@"foo/bar");
 }
 
 - (void)testCollectsGarbageAfterChangeBatchWithNoTargetIDs {
@@ -576,17 +627,18 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   [self allocateQuery:query];
   FSTAssertTargetID(2);
 
-  // Applies to non-existent target
+  // Cache something for foo/bar, since we need it in order to patch.
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 0, @{@"foo" : @"old"}, NO),
                                                   @[ @2 ], @[])];
-  // This is odd, we don't have the document cached. cache partial?
+  // Apply patch, pins the document in the mutation queue
   [self writeMutation:FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})];
-  [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 3, @{@"foo" : @"bar"}, NO),
-          @[ ], @[ @2 ])];
+  // Release the query so that our target count goes back to 0 and we are considered up-to-date.
+  [self.localStore releaseQuery:query];
+
   [self writeMutation:FSTTestSetMutation(@"foo/bah", @{@"foo" : @"bah"})];
   [self writeMutation:FSTTestDeleteMutation(@"foo/baz")];
   [self collectGarbage];
-  FSTAssertContains(FSTTestDoc("foo/bar", 3, @{@"foo" : @"bar"}, YES));
+  FSTAssertContains(FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, YES));
   FSTAssertContains(FSTTestDoc("foo/bah", 0, @{@"foo" : @"bah"}, YES));
   FSTAssertContains(FSTTestDeletedDoc("foo/baz", 0));
 
@@ -612,9 +664,17 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 - (void)testCollectsGarbageAfterRejectedMutation {
   if ([self isTestBaseClass]) return;
 
+  FSTQuery *query = FSTTestQuery("foo");
+  [self allocateQuery:query];
+  FSTAssertTargetID(2);
+
+  // Cache something for foo/bar, since we need it in order to patch.
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 0, @{@"foo" : @"old"}, NO),
-                                                  @[ @1 ], @[])];
+          @[ @2 ], @[])];
   [self writeMutation:FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})];
+  // Release the query so that our target count goes back to 0 and we are considered up-to-date.
+  [self.localStore releaseQuery:query];
+
   [self writeMutation:FSTTestSetMutation(@"foo/bah", @{@"foo" : @"bah"})];
   [self writeMutation:FSTTestDeleteMutation(@"foo/baz")];
   [self collectGarbage];
