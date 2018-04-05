@@ -39,8 +39,13 @@ using firebase::firestore::model::ResourcePath;
 
 NS_ASSUME_NONNULL_BEGIN
 
+using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUser>;
+
 @interface FSTMemoryPersistence ()
 @property(nonatomic, assign, getter=isStarted) BOOL started;
+
+- (const MutationQueues &)mutationQueues;
+
 @end
 
 @implementation FSTMemoryPersistence {
@@ -57,9 +62,11 @@ NS_ASSUME_NONNULL_BEGIN
   /** The FSTRemoteDocumentCache representing the persisted cache of remote documents. */
   FSTMemoryRemoteDocumentCache *_remoteDocumentCache;
 
-  std::unordered_map<User, FSTMemoryMutationQueue *, HashUser> _mutationQueues;
+  MutationQueues _mutationQueues;
 
   FSTTransactionRunner _transactionRunner;
+
+  id<FSTReferenceDelegate> _referenceDelegate;
 }
 
 + (instancetype)persistence {
@@ -129,8 +136,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)init {
   if (self = [super init]) {
-    _queryCache = [[FSTMemoryQueryCache alloc] init];
+    // Hard-coded for now
+    FSTMemoryEagerReferenceDelegate *referenceDelegate =
+            [[FSTMemoryEagerReferenceDelegate alloc] initWithPersistence:self];
+    _referenceDelegate = referenceDelegate;
+    _queryCache = [[FSTMemoryQueryCache alloc] initWithPersistence:self];
     _remoteDocumentCache = [[FSTMemoryRemoteDocumentCache alloc] init];
+    _transactionRunner.SetBackingPersistence(referenceDelegate);
   }
   return self;
 }
@@ -152,13 +164,21 @@ NS_ASSUME_NONNULL_BEGIN
   return _transactionRunner;
 }
 
+- (id<FSTReferenceDelegate>)referenceDelegate {
+  return _referenceDelegate;
+}
+
 - (id<FSTMutationQueue>)mutationQueueForUser:(const User &)user {
   id<FSTMutationQueue> queue = _mutationQueues[user];
   if (!queue) {
-    queue = [FSTMemoryMutationQueue mutationQueue];
+    queue = [FSTMemoryMutationQueue mutationQueueWithPersistence:self];
     _mutationQueues[user] = queue;
   }
   return queue;
+}
+
+- (const std::unordered_map<User, FSTMemoryMutationQueue *, HashUser>&)mutationQueues {
+  return _mutationQueues;
 }
 
 - (id<FSTQueryCache>)queryCache {
@@ -180,30 +200,81 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 @implementation FSTMemoryEagerReferenceDelegate {
-  FSTReferenceSet *_references;
-  FSTEagerGarbageCollector *_gc;
   std::unique_ptr<std::set<FSTDocumentKey *> > _orphaned;
   FSTMemoryPersistence *_persistence;
-  FSTMemoryRemoteDocumentCache *_docCache;
+  std::set<FSTReferenceSet *> _additionalReferences;
 }
 
-- (instancetype)initWithReferenceSet:(FSTReferenceSet *)references
-                    garbageCollector:(FSTEagerGarbageCollector *)gc {
+- (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence {
   if (self = [super init]) {
-    _references = references;
-    _gc = gc;
+    _persistence = persistence;
   }
   return self;
 }
 
-- (void)startTransaction {
+- (void)addReferenceSet:(FSTReferenceSet *)set {
+  _additionalReferences.insert(set);
+}
+
+- (void)addReference:(FSTDocumentKey *)key
+              target:(__unused FSTTargetID)targetID
+      sequenceNumber:(__unused FSTListenSequenceNumber)sequenceNumber {
+  _orphaned->erase(key);
+}
+
+- (void)removeReference:(FSTDocumentKey *)key
+                 target:(__unused FSTTargetID)targetID
+         sequenceNumber:(__unused FSTListenSequenceNumber)sequenceNumber {
+  _orphaned->insert(key);
+}
+
+- (void)removeMutationReference:(FSTDocumentKey *)key {
+  _orphaned->insert(key);
+}
+
+- (BOOL)isReferenced:(FSTDocumentKey *)key {
+  if ([[_persistence queryCache] containsKey:key]) {
+    return YES;
+  }
+  if ([self mutationQueuesContainKey:key]) {
+    return YES;
+  }
+  for (auto it = _additionalReferences.begin(); it != _additionalReferences.end(); ++it) {
+    if ([*it containsKey:key]) {
+      return YES;
+    }
+  }
+  return NO;
+}
+
+- (void)documentUpdated:(FSTDocumentKey *)key {
+  if ([self isReferenced:key]) {
+    _orphaned->erase(key);
+  } else {
+    _orphaned->insert(key);
+  }
+}
+
+
+- (void)startTransaction:(__unused absl::string_view)label {
   _orphaned = absl::make_unique<std::set<FSTDocumentKey *> >();
+}
+
+- (BOOL)mutationQueuesContainKey:(FSTDocumentKey *)key {
+  const MutationQueues& queues = [_persistence mutationQueues];
+  for (auto it = queues.begin(); it != queues.end(); ++it) {
+    if ([it->second containsKey:key]) {
+      return YES;
+    }
+  }
+  return NO;
 }
 
 - (void)commitTransaction {
   for (auto it = _orphaned->begin(); it != _orphaned->end(); ++it) {
-    if (![_references containsKey:*it]) {
-      [_gc addPotentialGarbageKey:*it];
+    FSTDocumentKey *key = *it;
+    if (![self isReferenced:key]) {
+      [[_persistence remoteDocumentCache] removeEntryForKey:key];
     }
   }
   _orphaned.reset();

@@ -56,8 +56,9 @@ NS_ASSUME_NONNULL_BEGIN
   FSTMemoryPersistence *_persistence;
 }
 
-- (instancetype)init {
+- (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence {
   if (self = [super init]) {
+    _persistence = persistence;
     _queries = [NSMutableDictionary dictionary];
     _orphanedDocumentSequenceNumbers = [NSMutableDictionary dictionary];
     _references = [[FSTReferenceSet alloc] init];
@@ -212,29 +213,29 @@ NS_ASSUME_NONNULL_BEGIN
         [_persistence.referenceDelegate removeReference:key
                                                  target:queryData.targetID
                                          sequenceNumber:queryData.sequenceNumber];
-        /*if (![self.references containsKey:key] && ![reset.documents containsObject:key]) {
-          orphaned.insert(ref.key);
-        }*/
       }];
 
       for (FSTDocumentKey *key in [reset.documents objectEnumerator]) {
         [self.orphanedDocumentSequenceNumbers removeObjectForKey:key];
-        orphaned.erase(key);
+        [_persistence.referenceDelegate addReference:key
+                                              target:queryData.targetID
+                                      sequenceNumber:queryData.sequenceNumber];
         [self.references addReferenceToKey:key forID:queryData.targetID];
       }
     } else if ([mapping isKindOfClass:[FSTUpdateMapping class]]) {
       FSTUpdateMapping *update = (FSTUpdateMapping *)mapping;
       for (FSTDocumentKey *key in [update.removedDocuments objectEnumerator]) {
         [self.references removeReferenceToKey:key forID:queryData.targetID];
-        // TODO(gsoltis): can the same document be added and removed in the same mapping update?
-        if (![self.references containsKey:key]) {
-          orphaned.insert(key);
-        }
+        [_persistence.referenceDelegate removeReference:key
+                                                 target:queryData.targetID
+                                         sequenceNumber:queryData.sequenceNumber];
       }
 
       for (FSTDocumentKey *key in [update.addedDocuments objectEnumerator]) {
         [self.orphanedDocumentSequenceNumbers removeObjectForKey:key];
-        orphaned.erase(key);
+        [_persistence.referenceDelegate addReference:key
+                                              target:queryData.targetID
+                                      sequenceNumber:queryData.sequenceNumber];
         [self.references addReferenceToKey:key forID:queryData.targetID];
       }
     } else {

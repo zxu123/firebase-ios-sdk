@@ -111,6 +111,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
     _localDocuments = [FSTLocalDocumentsView viewWithRemoteDocumentCache:_remoteDocumentCache
                                                            mutationQueue:_mutationQueue];
     _localViewReferences = [[FSTReferenceSet alloc] init];
+    [_persistence.referenceDelegate addReferenceSet:_localViewReferences];
 
     _garbageCollector = garbageCollector;
     [_garbageCollector addGarbageSource:_queryCache];
@@ -312,6 +313,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
       }*/
     }];
 
+    FSTAssert(orphaned.size() == 0, @"Expected to not use orphaned");
     for (auto it = orphaned.begin(); it != orphaned.end(); ++it) {
       [self.garbageCollector addPotentialGarbageKey:*it];
     }
@@ -338,7 +340,11 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
 
       // The document might be garbage because it was unreferenced by everything.
       // Make sure to mark it as garbage if it is...
-      [self.garbageCollector addPotentialGarbageKey:key];
+
+      // This can happen because we can get updates for queries we've stopped listening
+      // to
+      //[self.garbageCollector addPotentialGarbageKey:key];
+      [self.persistence.referenceDelegate documentUpdated:key];
     }
 
     // HACK: The only reason we allow omitting snapshot version is so we can synthesize remote

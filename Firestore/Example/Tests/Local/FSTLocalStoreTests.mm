@@ -572,8 +572,14 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 - (void)testCollectsGarbageAfterAcknowledgedMutation {
   if ([self isTestBaseClass]) return;
 
+  //FSTQuery *query = FSTTestQuery("foo");
+  //[self allocateQuery:query];
+  //FSTAssertTargetID(2);
+
+  // Applies to non-existent target
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 0, @{@"foo" : @"old"}, NO),
                                                   @[ @1 ], @[])];
+  // This is odd, we don't have the document cached. cache partial?
   [self writeMutation:FSTTestPatchMutation("foo/bar", @{@"foo" : @"bar"}, {})];
   [self writeMutation:FSTTestSetMutation(@"foo/bah", @{@"foo" : @"bah"})];
   [self writeMutation:FSTTestDeleteMutation(@"foo/baz")];
@@ -648,11 +654,15 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTAssertContains(FSTTestDoc("foo/baz", 0, @{@"foo" : @"baz"}, YES));
 
   [self notifyLocalViewChanges:FSTTestViewChanges(query, @[ @"foo/bar", @"foo/baz" ], @[])];
+  FSTAssertContains(FSTTestDoc("foo/bar", 1, @{@"foo" : @"bar"}, NO));
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 1, @{@"foo" : @"bar"}, NO),
                                                   @[], @[ @2 ])];
+  // Note: non-existent target. Kept as referenced by local view.
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/baz", 2, @{@"foo" : @"baz"}, NO),
                                                   @[ @1 ], @[])];
+  FSTAssertContains(FSTTestDoc("foo/baz", 2, @{@"foo" : @"baz"}, YES));
   [self acknowledgeMutationWithVersion:2];
+  FSTAssertContains(FSTTestDoc("foo/baz", 2, @{@"foo" : @"baz"}, NO));
   [self collectGarbage];
   FSTAssertContains(FSTTestDoc("foo/bar", 1, @{@"foo" : @"bar"}, NO));
   FSTAssertContains(FSTTestDoc("foo/baz", 2, @{@"foo" : @"baz"}, NO));
@@ -686,9 +696,9 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTTargetID targetID = 321;
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 1, @{}, NO),
                                                   @[ @(targetID) ], @[])];
-  FSTAssertContains(FSTTestDoc("foo/bar", 1, @{}, NO));
+  //FSTAssertContains(FSTTestDoc("foo/bar", 1, @{}, NO));
 
-  [self collectGarbage];
+  //[self collectGarbage];
   FSTAssertNotContains(@"foo/bar");
 }
 

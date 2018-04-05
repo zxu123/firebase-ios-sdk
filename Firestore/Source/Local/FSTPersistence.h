@@ -23,6 +23,7 @@
 @class FSTDocumentKey;
 @protocol FSTMutationQueue;
 @protocol FSTQueryCache;
+@class FSTReferenceSet;
 @protocol FSTRemoteDocumentCache;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -106,6 +107,8 @@ struct FSTTransactionRunner;
 
 @protocol FSTReferenceDelegate
 
+- (void)addReferenceSet:(FSTReferenceSet *)set;
+
 - (void)addReference:(FSTDocumentKey *)key
               target:(FSTTargetID)targetID
       sequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
@@ -114,9 +117,13 @@ struct FSTTransactionRunner;
                  target:(FSTTargetID)targetID
          sequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
 
-- (void)startTransaction;
+- (void)removeMutationReference:(FSTDocumentKey *)key;
 
-- (void)commitTransaction;
+- (void)documentUpdated:(FSTDocumentKey *)key;
+
+//- (void)startTransaction;
+
+//- (void)commitTransaction;
 
 @end
 

@@ -76,14 +76,17 @@ static const int32_t kTransformSizeEstimate = sizeof(int64_t) + sizeof(int32_t);
 
 @end
 
-@implementation FSTMemoryMutationQueue
-
-+ (instancetype)mutationQueue {
-  return [[FSTMemoryMutationQueue alloc] init];
+@implementation FSTMemoryMutationQueue {
+  FSTMemoryPersistence *_persistence;
 }
 
-- (instancetype)init {
++ (instancetype)mutationQueueWithPersistence:(FSTMemoryPersistence *)persistence {
+  return [[FSTMemoryMutationQueue alloc] initWithPersistence:persistence];
+}
+
+- (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence {
   if (self = [super init]) {
+    _persistence = persistence;
     _queue = [NSMutableArray array];
     _batchesByDocumentKey =
         [FSTImmutableSortedSet setWithComparator:FSTDocumentReferenceComparatorByKey];
@@ -344,13 +347,15 @@ static const int32_t kTransformSizeEstimate = sizeof(int64_t) + sizeof(int32_t);
   }
 
   // Remove entries from the index too.
-  id<FSTGarbageCollector> garbageCollector = self.garbageCollector;
+  //id<FSTGarbageCollector> garbageCollector = self.garbageCollector;
   FSTImmutableSortedSet<FSTDocumentReference *> *references = self.batchesByDocumentKey;
   for (FSTMutationBatch *batch in batches) {
     FSTBatchID batchID = batch.batchID;
     for (FSTMutation *mutation in batch.mutations) {
       const DocumentKey &key = mutation.key;
-      [garbageCollector addPotentialGarbageKey:key];
+      //[garbageCollector addPotentialGarbageKey:key];
+      [_persistence.referenceDelegate removeMutationReference:key];
+
 
       FSTDocumentReference *reference = [[FSTDocumentReference alloc] initWithKey:key ID:batchID];
       references = [references setByRemovingObject:reference];
