@@ -56,14 +56,17 @@ class RollingSequenceNumberBuffer {
   FSTLRUThreshold _threshold;
   long _lastGcTime;
   long _startTimeEpoch;
+  id<FSTLRUDelegate> _delegate;
 }
 
 - (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache
+                          delegate:(id<FSTLRUDelegate>)delegate
                         thresholds:(FSTLRUThreshold)thresholds
                                now:(long)now {
   self = [super init];
   if (self) {
     _queryCache = queryCache;
+    _delegate = delegate;
     _threshold = std::move(thresholds);
     _startTimeEpoch = now;
   }
@@ -101,10 +104,10 @@ class RollingSequenceNumberBuffer {
   }
   RollingSequenceNumberBuffer buffer(queryCount);
   RollingSequenceNumberBuffer *ptr_to_buffer = &buffer;
-  [self.queryCache enumerateTargetsUsingBlock:^(FSTQueryData *queryData, BOOL *stop) {
+  [_delegate enumerateTargetsUsingBlock:^(FSTQueryData *queryData, BOOL *stop) {
     ptr_to_buffer->AddElement(queryData.sequenceNumber);
   }];
-  [self.queryCache enumerateOrphanedDocumentsUsingBlock:^(
+  [_delegate enumerateMutationsUsingBlock:^(
                        FSTDocumentKey *docKey, FSTListenSequenceNumber sequenceNumber, BOOL *stop) {
     ptr_to_buffer->AddElement(sequenceNumber);
   }];
@@ -115,7 +118,7 @@ class RollingSequenceNumberBuffer {
                                        liveQueries:
                                            (NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries {
   return
-      [self.queryCache removeQueriesThroughSequenceNumber:sequenceNumber liveQueries:liveQueries];
+      [_delegate removeQueriesThroughSequenceNumber:sequenceNumber liveQueries:liveQueries];
 }
 
 - (NSUInteger)removeOrphanedDocuments:(id<FSTRemoteDocumentCache>)remoteDocumentCache

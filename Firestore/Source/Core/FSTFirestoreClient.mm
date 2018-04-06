@@ -161,7 +161,7 @@ NS_ASSUME_NONNULL_BEGIN
     _persistence = [[FSTLevelDB alloc] initWithDirectory:dir serializer:serializer];
   } else {
     garbageCollector = [[FSTEagerGarbageCollector alloc] init];
-    _persistence = [FSTMemoryPersistence persistence];
+    _persistence = [FSTMemoryPersistence persistenceWithEagerGC];
   }
 
   NSError *error;

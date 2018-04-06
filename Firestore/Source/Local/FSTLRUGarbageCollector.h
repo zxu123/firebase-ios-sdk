@@ -30,9 +30,22 @@ struct FSTLRUThreshold {
   }
 };
 
+@protocol FSTLRUDelegate
+
+- (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData, BOOL *stop))block;
+
+- (void)enumerateMutationsUsingBlock:(void (^)(FSTDocumentKey *key, FSTListenSequenceNumber sequenceNumber, BOOL *stop))block;
+
+- (void)removeOrphanedDocumentsThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
+
+- (NSUInteger)removeQueriesThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber liveQueries:(NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries;
+
+@end
+
 @interface FSTLRUGarbageCollector : NSObject
 
 - (instancetype)initWithQueryCache:(id<FSTQueryCache>)queryCache
+                          delegate:(id<FSTLRUDelegate>)delegate
                         thresholds:(FSTLRUThreshold)thresholds
                                now:(long)now;
 

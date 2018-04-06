@@ -19,6 +19,7 @@
 #import "Firestore/Source/Local/FSTPersistence.h"
 #include "Firestore/core/src/firebase/firestore/model/resource_path.h"
 
+@class FSTLRUGarbageCollector;
 @class FSTMaybeDocument;
 @class FSTObjectValue;
 @class FSTReferenceSet;
@@ -31,7 +32,9 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @interface FSTMemoryPersistence : NSObject <FSTPersistence>
 
-+ (instancetype)persistence;
++ (instancetype)persistenceWithEagerGC;
+
++ (instancetype)persistenceWithLRUGC;
 
 + (size_t)objectValueSizeInMemory:(FSTObjectValue *)object;
 
@@ -44,9 +47,14 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 @interface FSTMemoryLRUReferenceDelegate : NSObject <FSTReferenceDelegate>
+
+- (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence;
+
+@property(strong, nonatomic, readonly) FSTLRUGarbageCollector *gc;
+
 @end
 
-@interface FSTMemoryEagerReferenceDelegate : NSObject <FSTReferenceDelegate, FSTTransactional>
+@interface FSTMemoryEagerReferenceDelegate : NSObject <FSTReferenceDelegate>
 
 - (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence;
 

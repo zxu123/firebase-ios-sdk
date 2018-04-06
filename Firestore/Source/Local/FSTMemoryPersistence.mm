@@ -19,6 +19,7 @@
 #include <unordered_map>
 
 #include "absl/memory/memory.h"
+#import "Firestore/Source/Local/FSTLRUGarbageCollector.h"
 #import "Firestore/Source/Local/FSTMemoryMutationQueue.h"
 #import "Firestore/Source/Local/FSTMemoryQueryCache.h"
 #import "Firestore/Source/Local/FSTMemoryRemoteDocumentCache.h"
@@ -69,8 +70,20 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   id<FSTReferenceDelegate> _referenceDelegate;
 }
 
-+ (instancetype)persistence {
+/*+ (instancetype)persistence {
   return [[FSTMemoryPersistence alloc] init];
+}*/
+
++ (instancetype)persistenceWithEagerGC {
+  return [[FSTMemoryPersistence alloc] initWithReferenceBlock:^id <FSTReferenceDelegate>(FSTMemoryPersistence *persistence) {
+    return [[FSTMemoryEagerReferenceDelegate alloc] initWithPersistence:persistence];
+  }];
+}
+
++ (instancetype)persistenceWithLRUGC {
+  return [[FSTMemoryPersistence alloc] initWithReferenceBlock:^id <FSTReferenceDelegate>(FSTMemoryPersistence *persistence) {
+    return [[FSTMemoryLRUReferenceDelegate alloc] initWithPersistence:persistence];
+  }];
 }
 
 + (size_t)valueSizeInMemory:(FSTFieldValue *)fieldValue {
@@ -134,15 +147,16 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   return result;
 }
 
-- (instancetype)init {
+- (instancetype)initWithReferenceBlock:(id<FSTReferenceDelegate> (^)(FSTMemoryPersistence *persistence))block {
   if (self = [super init]) {
     // Hard-coded for now
-    FSTMemoryEagerReferenceDelegate *referenceDelegate =
-            [[FSTMemoryEagerReferenceDelegate alloc] initWithPersistence:self];
-    _referenceDelegate = referenceDelegate;
+    //FSTMemoryEagerReferenceDelegate *referenceDelegate =
+    //        [[FSTMemoryEagerReferenceDelegate alloc] initWithPersistence:self];
+
+    _referenceDelegate = block(self);
     _queryCache = [[FSTMemoryQueryCache alloc] initWithPersistence:self];
     _remoteDocumentCache = [[FSTMemoryRemoteDocumentCache alloc] init];
-    _transactionRunner.SetBackingPersistence(referenceDelegate);
+    _transactionRunner.SetBackingPersistence(_referenceDelegate);
   }
   return self;
 }
@@ -195,6 +209,29 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
     bytes += [it->second byteSize];
   }
   return bytes;
+}
+
+@end
+
+@implementation FSTMemoryLRUReferenceDelegate {
+  //sFSTLRUGarbageCollector *_gc;
+  FSTMemoryPersistence *_persistence;
+  std::unordered_map<FSTDocumentKey *, FSTListenSequenceNumber> _sequenceNumbers;
+}
+
+- (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence {
+  if (self = [super init]) {
+    _persistence = persistence;
+  }
+  return self;
+}
+
+- (void)startTransaction:(absl::string_view)label {
+  // wat do?
+}
+
+- (void)commitTransaction {
+  // TODO(gsoltis): maybe check if we need to schedule a GC?
 }
 
 @end
@@ -278,7 +315,6 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
     }
   }
   _orphaned.reset();
-  // TODO(gsoltis): collectGarbage here? or enumerate
 }
 
 @end

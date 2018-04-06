@@ -105,7 +105,7 @@ struct FSTTransactionRunner;
 
 @end
 
-@protocol FSTReferenceDelegate
+@protocol FSTReferenceDelegate<FSTTransactional>
 
 - (void)addReferenceSet:(FSTReferenceSet *)set;
 
@@ -120,10 +120,6 @@ struct FSTTransactionRunner;
 - (void)removeMutationReference:(FSTDocumentKey *)key;
 
 - (void)documentUpdated:(FSTDocumentKey *)key;
-
-//- (void)startTransaction;
-
-//- (void)commitTransaction;
 
 @end
 

@@ -52,6 +52,10 @@ NS_ASSUME_NONNULL_BEGIN
   @throw FSTAbstractMethodException();  // NOLINT
 }
 
+- (FSTLRUGarbageCollector *)gcForPersistence:(id<FSTPersistence>)persistence {
+  @throw FSTAbstractMethodException();  // NOLINT
+}
+
 - (void)setUp {
   [super setUp];
 
@@ -130,10 +134,12 @@ NS_ASSUME_NONNULL_BEGIN
         [queryCache addQueryData:[self nextTestQuery]];
       }
 
-      FSTLRUGarbageCollector *gc =
+      /*FSTLRUGarbageCollector *gc =
           [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache
+                                          delegate:
                                                   thresholds:FSTLRUThreshold::Defaults()
-                                                         now:0];
+                                                         now:0];*/
+      FSTLRUGarbageCollector *gc = [self gcForPersistence:persistence];
       FSTListenSequenceNumber tenth = [gc queryCountForPercentile:10];
       XCTAssertEqual(expectedTenthPercentile, tenth, @"Total query count: %i", numQueries);
     });
