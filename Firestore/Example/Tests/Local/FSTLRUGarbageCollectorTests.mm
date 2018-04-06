@@ -148,7 +148,7 @@ NS_ASSUME_NONNULL_BEGIN
     [persistence shutdown];
   }
 }
-/*
+
 - (void)testSequenceNumberForQueryCount {
   if ([self isTestBaseClass]) return;
 
@@ -160,10 +160,7 @@ NS_ASSUME_NONNULL_BEGIN
     persistence.run("no queries", [&]() {
       id<FSTQueryCache> queryCache = [persistence queryCache];
       [queryCache start];
-      FSTLRUGarbageCollector *gc =
-          [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache
-                                                  thresholds:FSTLRUThreshold::Defaults()
-                                                         now:0];
+      FSTLRUGarbageCollector *gc = [self gcForPersistence:persistence];
       FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:0];
       XCTAssertEqual(kFSTListenSequenceNumberInvalid, highestToCollect);
     });
@@ -177,10 +174,7 @@ NS_ASSUME_NONNULL_BEGIN
     persistence.run("50 queries, want 10. Should get 1010.", [&]() {
       id<FSTQueryCache> queryCache = [persistence queryCache];
       [queryCache start];
-      FSTLRUGarbageCollector *gc =
-          [[FSTLRUGarbageCollector alloc] initWithQueryCache:queryCache
-                                                  thresholds:FSTLRUThreshold::Defaults()
-                                                         now:0];
+      FSTLRUGarbageCollector *gc = [self gcForPersistence:persistence];
       for (int i = 0; i < 50; i++) {
         [queryCache addQueryData:[self nextTestQuery]];
       }
@@ -189,7 +183,7 @@ NS_ASSUME_NONNULL_BEGIN
     });
     [persistence shutdown];
   }
-
+/*
   // 50 queries, 9 with 1001, incrementing from there. Should get 1002.
   {
     _previousSequenceNumber = 1000;
@@ -301,9 +295,9 @@ NS_ASSUME_NONNULL_BEGIN
           XCTAssertEqual(1002, highestToCollect);
         });
     [persistence shutdown];
-  }
+  }*/
 }
-
+/*
 - (void)testRemoveQueriesUpThroughSequenceNumber {
   if ([self isTestBaseClass]) return;
 

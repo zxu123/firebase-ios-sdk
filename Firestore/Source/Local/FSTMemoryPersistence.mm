@@ -153,8 +153,8 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
     //FSTMemoryEagerReferenceDelegate *referenceDelegate =
     //        [[FSTMemoryEagerReferenceDelegate alloc] initWithPersistence:self];
 
-    _referenceDelegate = block(self);
     _queryCache = [[FSTMemoryQueryCache alloc] initWithPersistence:self];
+    _referenceDelegate = block(self);
     _remoteDocumentCache = [[FSTMemoryRemoteDocumentCache alloc] init];
     _transactionRunner.SetBackingPersistence(_referenceDelegate);
   }
@@ -222,6 +222,10 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
 - (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence {
   if (self = [super init]) {
     _persistence = persistence;
+    _gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:[_persistence queryCache]
+                                                    delegate:self
+                                                  thresholds:FSTLRUThreshold::Defaults()
+                                                         now:0];
   }
   return self;
 }
