@@ -117,7 +117,8 @@ struct FSTTransactionRunner;
                  target:(FSTTargetID)targetID
          sequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
 
-- (void)removeMutationReference:(FSTDocumentKey *)key;
+- (void)removeMutationReference:(FSTDocumentKey *)key
+                 sequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
 
 - (void)documentUpdated:(FSTDocumentKey *)key;
 

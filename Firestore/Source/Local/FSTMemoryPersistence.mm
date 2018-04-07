@@ -214,13 +214,13 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
 @end
 
 @implementation FSTMemoryLRUReferenceDelegate {
-  //sFSTLRUGarbageCollector *_gc;
   FSTMemoryPersistence *_persistence;
-  std::unordered_map<FSTDocumentKey *, FSTListenSequenceNumber> _sequenceNumbers;
+  NSMutableDictionary<FSTDocumentKey *, NSNumber *> *_sequenceNumbers;
 }
 
 - (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence {
   if (self = [super init]) {
+    _sequenceNumbers = [NSMutableDictionary dictionary];
     _persistence = persistence;
     _gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:[_persistence queryCache]
                                                     delegate:self
@@ -237,6 +237,35 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
 - (void)commitTransaction {
   // TODO(gsoltis): maybe check if we need to schedule a GC?
 }
+
+- (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData, BOOL *stop))block {
+  return [_persistence.queryCache enumerateTargetsUsingBlock:block];
+}
+
+- (void)enumerateMutationsUsingBlock:(void (^)(FSTDocumentKey *key, FSTListenSequenceNumber sequenceNumber, BOOL *stop))block {
+  [_sequenceNumbers enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, NSNumber *seq, BOOL *stop) {
+    FSTListenSequenceNumber sequenceNumber = [seq longLongValue];
+    if (![_persistence.queryCache containsKey:key]) {
+      block(key, sequenceNumber, stop);
+    }
+  }];
+}
+
+- (NSUInteger)removeQueriesThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
+                                     liveQueries:(NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries {
+  return [_persistence.queryCache removeQueriesThroughSequenceNumber:sequenceNumber liveQueries:liveQueries];
+}
+
+
+- (void)addReference:(FSTDocumentKey *)key target:(FSTTargetID)targetID sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  _sequenceNumbers[key] = @(sequenceNumber);
+}
+
+- (void)removeMutationReference:(FSTDocumentKey *)key
+                 sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  _sequenceNumbers[key] = @(sequenceNumber);
+}
+
 
 @end
 
@@ -269,7 +298,8 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   _orphaned->insert(key);
 }
 
-- (void)removeMutationReference:(FSTDocumentKey *)key {
+- (void)removeMutationReference:(FSTDocumentKey *)key
+                 sequenceNumber:(__unused FSTListenSequenceNumber)sequenceNumber{
   _orphaned->insert(key);
 }
 

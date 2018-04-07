@@ -296,7 +296,8 @@ static const int32_t kTransformSizeEstimate = sizeof(int64_t) + sizeof(int32_t);
   return result;
 }
 
-- (void)removeMutationBatches:(NSArray<FSTMutationBatch *> *)batches {
+- (void)removeMutationBatches:(NSArray<FSTMutationBatch *> *)batches
+               sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
   NSUInteger batchCount = batches.count;
   FSTAssert(batchCount > 0, @"Should not remove mutations when none exist.");
 
@@ -354,7 +355,8 @@ static const int32_t kTransformSizeEstimate = sizeof(int64_t) + sizeof(int32_t);
     for (FSTMutation *mutation in batch.mutations) {
       const DocumentKey &key = mutation.key;
       //[garbageCollector addPotentialGarbageKey:key];
-      [_persistence.referenceDelegate removeMutationReference:key];
+      [_persistence.referenceDelegate removeMutationReference:key
+                                               sequenceNumber:sequenceNumber];
 
 
       FSTDocumentReference *reference = [[FSTDocumentReference alloc] initWithKey:key ID:batchID];
