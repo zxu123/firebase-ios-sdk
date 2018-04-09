@@ -16,6 +16,9 @@
 
 #import "Firestore/Source/Local/FSTLocalStore.h"
 
+#include <set>
+
+#import "FIRTimestamp.h"
 #import "Firestore/Source/Core/FSTListenSequence.h"
 #import "Firestore/Source/Core/FSTQuery.h"
 #import "Firestore/Source/Core/FSTSnapshotVersion.h"
@@ -266,7 +269,6 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
 
 - (FSTMaybeDocumentDictionary *)applyRemoteEvent:(FSTRemoteEvent *)remoteEvent {
   return self.persistence.run("Apply remote event", [&]() -> FSTMaybeDocumentDictionary * {
-    __block std::set<FSTDocumentKey *> orphaned;
     FSTListenSequenceNumber sequenceNumber = [self.listenSequence next];
     [remoteEvent.targetChanges enumerateKeysAndObjectsUsingBlock:^(
                                    NSNumber *targetIDNumber, FSTTargetChange *change, BOOL *stop) {
@@ -292,7 +294,6 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
       //[self.queryCache handleTargetChange:change queryData:queryData orphaned:orphaned];
 
       FSTTargetMapping *mapping = change.mapping;
-      FSTListenSequenceNumber sequenceNumber = queryData.sequenceNumber;
       FSTTargetID targetID = queryData.targetID;
       if (mapping) {
         // First make sure that all references are deleted.
@@ -316,11 +317,6 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
         }
       }
     }];
-
-    FSTAssert(orphaned.size() == 0, @"Expected to not use orphaned");
-    for (auto it = orphaned.begin(); it != orphaned.end(); ++it) {
-      [self.garbageCollector addPotentialGarbageKey:*it];
-    }
 
     // TODO(klimt): This could probably be an NSMutableDictionary.
     FSTDocumentKeySet *changedDocKeys = [FSTDocumentKeySet keySet];

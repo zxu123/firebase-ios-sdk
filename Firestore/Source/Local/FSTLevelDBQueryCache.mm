@@ -16,6 +16,9 @@
 
 #import "Firestore/Source/Local/FSTLevelDBQueryCache.h"
 
+#include <memory>
+#include <string>
+
 #include <leveldb/db.h>
 #include <leveldb/write_batch.h>
 
@@ -27,10 +30,9 @@
 #import "Firestore/Source/Local/FSTQueryData.h"
 #import "Firestore/Source/Remote/FSTRemoteEvent.h"
 #import "Firestore/Source/Util/FSTAssert.h"
+#include "Firestore/core/src/firebase/firestore/model/document_key.h"
 #include "Firestore/core/src/firebase/firestore/util/ordered_code.h"
 #include "absl/strings/match.h"
-
-#include "Firestore/core/src/firebase/firestore/model/document_key.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
