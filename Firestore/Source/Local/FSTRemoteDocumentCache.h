@@ -25,6 +25,7 @@
 @class FSTQuery;
 @protocol FSTMutationQueue;
 @protocol FSTQueryCache;
+@protocol FSTSequenceNumberPersistence;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -72,9 +73,12 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (FSTDocumentDictionary *)documentsMatchingQuery:(FSTQuery *)query;
 
-- (NSUInteger)removeOrphanedDocuments:(id<FSTQueryCache>)queryCache
+/*- (NSUInteger)removeOrphanedDocuments:(id<FSTQueryCache>)queryCache
                 throughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
-                        mutationQueue:(id<FSTMutationQueue>)mutationQueue;
+                        mutationQueue:(id<FSTMutationQueue>)mutationQueue;*/
+
+- (NSUInteger)removeOrphanedDocuments:(id<FSTSequenceNumberPersistence>)sequenceNumberPersistence
+                throughSequenceNumber:(FSTListenSequenceNumber)upperBound;
 
 @end
 

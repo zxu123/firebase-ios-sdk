@@ -6,8 +6,9 @@
 
 @protocol FSTPersistence;
 @protocol FSTQueryCache;
+@protocol FSTSequenceNumberPersistence;
 
-extern const FSTListenSequenceNumber kFSTListenSequenceNumberInvalid;
+//extern const FSTListenSequenceNumber kFSTListenSequenceNumberInvalid;
 
 struct FSTLRUThreshold {
   long min_ms_since_start;
@@ -30,7 +31,7 @@ struct FSTLRUThreshold {
   }
 };
 
-@protocol FSTLRUDelegate
+@protocol FSTLRUDelegate<FSTSequenceNumberPersistence>
 
 - (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData, BOOL *stop))block;
 

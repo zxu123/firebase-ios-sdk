@@ -21,6 +21,7 @@
 #import "Firestore/Source/Local/FSTEagerGarbageCollector.h"
 #import "Firestore/Source/Local/FSTPersistence.h"
 #import "Firestore/Source/Local/FSTQueryData.h"
+#import "Firestore/Source/Local/FSTRemoteDocumentCache.h"
 
 #import "Firestore/Example/Tests/Util/FSTHelpers.h"
 #import "Firestore/third_party/Immutable/Tests/FSTImmutableSortedSet+Testing.h"
@@ -232,35 +233,68 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)testRemoveEmitsGarbageEvents {
   if ([self isTestBaseClass]) return;
 
-  self.persistence.run("testRemoveEmitsGarbageEvents", [&]() {
-    FSTEagerGarbageCollector *garbageCollector = [[FSTEagerGarbageCollector alloc] init];
-    [garbageCollector addGarbageSource:self.queryCache];
-    XCTAssertEqual([garbageCollector collectGarbage], std::set<DocumentKey>({}));
+  DocumentKey room1 = testutil::Key("rooms/bar");
+  DocumentKey room2 = testutil::Key("rooms/foo");
+  FSTQueryData *rooms = [self queryDataWithQuery:FSTTestQuery("rooms")];
 
-    FSTQueryData *rooms = [self queryDataWithQuery:FSTTestQuery("rooms")];
-    DocumentKey room1 = testutil::Key("rooms/bar");
-    DocumentKey room2 = testutil::Key("rooms/foo");
+  DocumentKey hall1 = testutil::Key("halls/bar");
+  DocumentKey hall2 = testutil::Key("halls/foo");
+  FSTQueryData *halls = [self queryDataWithQuery:FSTTestQuery("halls")];
+
+  self.persistence.run("testRemoveEmitsGarbageEvents", [&]() {
+    //FSTEagerGarbageCollector *garbageCollector = [[FSTEagerGarbageCollector alloc] init];
+    //[garbageCollector addGarbageSource:self.queryCache];
+    //XCTAssertEqual([garbageCollector collectGarbage], std::set<DocumentKey>({}));
+
     [self.queryCache addQueryData:rooms];
     [self addMatchingKey:room1 forTargetID:rooms.targetID atSequenceNumber:rooms.sequenceNumber];
     [self addMatchingKey:room2 forTargetID:rooms.targetID atSequenceNumber:rooms.sequenceNumber];
 
-    FSTQueryData *halls = [self queryDataWithQuery:FSTTestQuery("halls")];
-    DocumentKey hall1 = testutil::Key("halls/bar");
-    DocumentKey hall2 = testutil::Key("halls/foo");
     [self.queryCache addQueryData:halls];
     [self addMatchingKey:hall1 forTargetID:halls.targetID atSequenceNumber:halls.sequenceNumber];
     [self addMatchingKey:hall2 forTargetID:halls.targetID atSequenceNumber:halls.sequenceNumber];
+  });
 
-    XCTAssertEqual([garbageCollector collectGarbage], std::set<DocumentKey>({}));
+  self.persistence.run("garbage check 1", [&]() {
+    // Nothing should have been removed yet.
+    XCTAssertTrue([self.queryCache containsKey:room1]);
+    XCTAssertTrue([self.queryCache containsKey:room2]);
+    XCTAssertTrue([self.queryCache containsKey:hall1]);
+    XCTAssertTrue([self.queryCache containsKey:hall2]);
 
+    // trigger removal of room1
     [self removeMatchingKey:room1 forTargetID:rooms.targetID];
-    XCTAssertEqual([garbageCollector collectGarbage], std::set<DocumentKey>({room1}));
+  });
 
+  self.persistence.run("garbage check 2", [&]() {
+    // Just room1 should be removed
+    XCTAssertFalse([self.queryCache containsKey:room1]);
+    XCTAssertTrue([self.queryCache containsKey:room2]);
+    XCTAssertTrue([self.queryCache containsKey:hall1]);
+    XCTAssertTrue([self.queryCache containsKey:hall2]);
+
+    // trigger removal of everything associated with rooms
     [self.queryCache removeQueryData:rooms];
-    XCTAssertEqual([garbageCollector collectGarbage], std::set<DocumentKey>({room2}));
+  });
 
+  self.persistence.run("garbage check 3", [&]() {
+    // All of the rooms should have been removed.
+    XCTAssertFalse([self.queryCache containsKey:room1]);
+    XCTAssertFalse([self.queryCache containsKey:room2]);
+    XCTAssertTrue([self.queryCache containsKey:hall1]);
+    XCTAssertTrue([self.queryCache containsKey:hall2]);
+
+    // trigger removal of everything associated with halls
     [self.queryCache removeMatchingKeysForTargetID:halls.targetID];
-    XCTAssertEqual([garbageCollector collectGarbage], std::set<DocumentKey>({hall1, hall2}));
+  });
+
+  self.persistence.run("garbage check 4", [&]() {
+    // Everything should have been removed.
+    XCTAssertFalse([self.queryCache containsKey:room1]);
+    XCTAssertFalse([self.queryCache containsKey:room2]);
+    XCTAssertFalse([self.queryCache containsKey:hall1]);
+    XCTAssertFalse([self.queryCache containsKey:hall2]);
+
   });
 }
 
@@ -432,13 +466,13 @@ NS_ASSUME_NONNULL_BEGIN
   FSTDocumentKeySet *keys = [FSTDocumentKeySet keySet];
   keys = [keys setByAddingObject:key];
 
-  //[self.queryCache addMatchingKeys:keys forTargetID:targetID atSequenceNumber:sequenceNumber];
+  [self.queryCache addMatchingKeys:keys forTargetID:targetID atSequenceNumber:sequenceNumber];
 }
 
 - (void)removeMatchingKey:(const DocumentKey &)key forTargetID:(FSTTargetID)targetID {
   FSTDocumentKeySet *keys = [FSTDocumentKeySet keySet];
   keys = [keys setByAddingObject:key];
-  //[self.queryCache removeMatchingKeys:keys forTargetID:targetID atSequenceNumber:0];
+  [self.queryCache removeMatchingKeys:keys forTargetID:targetID atSequenceNumber:0];
 }
 
 @end

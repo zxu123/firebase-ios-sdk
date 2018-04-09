@@ -125,6 +125,7 @@ enum FSTRemovalResult {
        atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
 
 /** Removes the given document keys from the cached query results of the given target ID. */
+// TODO(gsoltis): is the sequence number necessary?
 - (void)removeMatchingKeys:(FSTDocumentKeySet *)keys
                forTargetID:(FSTTargetID)targetID
           atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber;

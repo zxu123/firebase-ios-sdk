@@ -149,10 +149,6 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
 
 - (instancetype)initWithReferenceBlock:(id<FSTReferenceDelegate> (^)(FSTMemoryPersistence *persistence))block {
   if (self = [super init]) {
-    // Hard-coded for now
-    //FSTMemoryEagerReferenceDelegate *referenceDelegate =
-    //        [[FSTMemoryEagerReferenceDelegate alloc] initWithPersistence:self];
-
     _queryCache = [[FSTMemoryQueryCache alloc] initWithPersistence:self];
     _referenceDelegate = block(self);
     _remoteDocumentCache = [[FSTMemoryRemoteDocumentCache alloc] init];
@@ -172,6 +168,7 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   // No durable state to ensure is closed on shutdown.
   FSTAssert(self.isStarted, @"FSTMemoryPersistence shutdown without start!");
   self.started = NO;
+  _referenceDelegate = nil;
 }
 
 - (const FSTTransactionRunner &)run {
@@ -216,6 +213,7 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
 @implementation FSTMemoryLRUReferenceDelegate {
   FSTMemoryPersistence *_persistence;
   NSMutableDictionary<FSTDocumentKey *, NSNumber *> *_sequenceNumbers;
+  FSTReferenceSet *_additionalReferences;
 }
 
 - (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence {
@@ -228,6 +226,12 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
                                                          now:0];
   }
   return self;
+}
+
+- (void)addReferenceSet:(FSTReferenceSet *)set {
+  // Technically can't assert this, due to restartWithNoopGarbageCollector (for now...)
+  //FSTAssert(_additionalReferences == nil, @"Overwriting additional references");
+  _additionalReferences = set;
 }
 
 - (void)startTransaction:(absl::string_view)label {
@@ -261,9 +265,41 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   _sequenceNumbers[key] = @(sequenceNumber);
 }
 
+- (void)removeReference:(FSTDocumentKey *)key target:(FSTTargetID)targetID sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  // No-op. LRU doesn't care when references are removed.
+}
+
+
 - (void)removeMutationReference:(FSTDocumentKey *)key
                  sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
   _sequenceNumbers[key] = @(sequenceNumber);
+}
+
+- (BOOL)mutationQueuesContainKey:(FSTDocumentKey *)key {
+  const MutationQueues& queues = [_persistence mutationQueues];
+  for (auto it = queues.begin(); it != queues.end(); ++it) {
+    if ([it->second containsKey:key]) {
+      return YES;
+    }
+  }
+  return NO;
+}
+
+- (BOOL)isPinnedAtSequenceNumber:(FSTListenSequenceNumber)upperBound document:(FSTDocumentKey *)key {
+  if ([self mutationQueuesContainKey:key]) {
+    return YES;
+  }
+  if ([_additionalReferences containsKey:key]) {
+    return YES;
+  }
+  if ([_persistence.queryCache containsKey:key]) {
+    return YES;
+  }
+  NSNumber *orphaned = _sequenceNumbers[key];
+  if (orphaned && [orphaned longLongValue] > upperBound) {
+    return YES;
+  }
+  return NO;
 }
 
 
@@ -272,7 +308,7 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
 @implementation FSTMemoryEagerReferenceDelegate {
   std::unique_ptr<std::set<FSTDocumentKey *> > _orphaned;
   FSTMemoryPersistence *_persistence;
-  std::set<FSTReferenceSet *> _additionalReferences;
+  FSTReferenceSet *_additionalReferences;
 }
 
 - (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence {
@@ -283,7 +319,9 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
 }
 
 - (void)addReferenceSet:(FSTReferenceSet *)set {
-  _additionalReferences.insert(set);
+  // Technically can't assert this, due to restartWithNoopGarbageCollector (for now...)
+  //FSTAssert(_additionalReferences == nil, @"Overwriting additional references");
+  _additionalReferences = set;
 }
 
 - (void)addReference:(FSTDocumentKey *)key
@@ -310,10 +348,8 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   if ([self mutationQueuesContainKey:key]) {
     return YES;
   }
-  for (auto it = _additionalReferences.begin(); it != _additionalReferences.end(); ++it) {
-    if ([*it containsKey:key]) {
-      return YES;
-    }
+  if ([_additionalReferences containsKey:key]) {
+    return YES;
   }
   return NO;
 }

@@ -640,7 +640,8 @@ static NSString *const kNoIOSTag = @"no-ios";
   NSFileManager *fs = [NSFileManager defaultManager];
   BOOL exclusiveMode = NO;
   for (NSString *file in [fs enumeratorAtPath:[bundle bundlePath]]) {
-    if (![@"json" isEqual:[file pathExtension]]) {
+    //if (![@"json" isEqual:[file pathExtension]]) {
+    if (![file isEqualToString:@"listen_spec_test.json"]) {
       continue;
     }
 
