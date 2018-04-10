@@ -112,6 +112,17 @@ using leveldb::WriteOptions;
   return NO;
 }
 
+- (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData, BOOL *stop))block {
+  FSTLevelDBQueryCache *queryCache = _db.queryCache;
+  [queryCache enumerateTargetsUsingBlock:block];
+}
+
+- (void)enumerateMutationsUsingBlock:(void (^)(FSTDocumentKey *key, FSTListenSequenceNumber sequenceNumber, BOOL *stop))block {
+  FSTLevelDBQueryCache *queryCache = _db.queryCache;
+  [queryCache enumerateOrphanedDocumentsUsingBlock:block];
+}
+
+
 - (NSUInteger)removeOrphanedDocumentsThroughSequenceNumber:(FSTListenSequenceNumber)upperBound {
   FSTLevelDBQueryCache *queryCache = _db.queryCache;
   __block NSUInteger count = 0;
@@ -125,6 +136,15 @@ using leveldb::WriteOptions;
   }];
   return count;
 }
+
+- (NSUInteger)removeQueriesThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
+                                     liveQueries:
+                                             (NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries {
+  FSTLevelDBQueryCache *queryCache = _db.queryCache;
+  return [queryCache removeQueriesThroughSequenceNumber:sequenceNumber
+                                            liveQueries:liveQueries];
+}
+
 
 - (FSTLRUGarbageCollector *)gc {
   return _gc;
