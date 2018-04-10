@@ -74,15 +74,15 @@ static NSString *const kNoIOSTag = @"no-ios";
 
 @implementation FSTSpecTests
 
-- (id<FSTPersistence>)persistence {
+- (id<FSTPersistence>)persistence:(BOOL)enableGC {
   @throw FSTAbstractMethodException();  // NOLINT
 }
 
 - (void)setUpForSpecWithConfig:(NSDictionary *)config {
   // Store persistence / GCEnabled so we can re-use it in doRestart.
-  self.driverPersistence = [self persistence];
   NSNumber *GCEnabled = config[@"useGarbageCollection"];
   self.GCEnabled = [GCEnabled boolValue];
+  self.driverPersistence = [self persistence:self.GCEnabled];
   self.driver = [[FSTSyncEngineTestDriver alloc] initWithPersistence:self.driverPersistence
                                                     garbageCollector:self.garbageCollector];
   [self.driver start];

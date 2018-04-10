@@ -65,7 +65,19 @@ NS_ASSUME_NONNULL_BEGIN
   return db;
 }
 
-+ (FSTMemoryPersistence *)memoryPersistence {
++ (FSTMemoryPersistence *)noGCMemoryPersistence {
+  NSError *error;
+  FSTMemoryPersistence *persistence = [FSTMemoryPersistence persistenceWithNoGC];
+  BOOL success = [persistence start:&error];
+  if (!success) {
+    [NSException raise:NSInternalInconsistencyException
+                format:@"Failed to start memory persistence: %@", error];
+  }
+
+  return persistence;
+}
+
++ (FSTMemoryPersistence *)eagerGCMemoryPersistence {
   NSError *error;
   FSTMemoryPersistence *persistence = [FSTMemoryPersistence persistenceWithEagerGC];
   BOOL success = [persistence start:&error];

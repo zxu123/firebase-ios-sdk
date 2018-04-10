@@ -37,6 +37,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (instancetype)persistenceWithLRUGC;
 
++ (instancetype)persistenceWithNoGC;
+
 + (size_t)objectValueSizeInMemory:(FSTObjectValue *)object;
 
 + (size_t)docSizeInMemory:(FSTMaybeDocument *)doc;

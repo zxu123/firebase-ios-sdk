@@ -39,7 +39,7 @@ NS_ASSUME_NONNULL_BEGIN
 @interface FSTSpecTests : XCTestCase
 
 /** Creates and returns an appropriate id<FSTPersistence> implementation. */
-- (id<FSTPersistence>)persistence;
+- (id<FSTPersistence>)persistence:(BOOL)enableGC;
 
 @end
 

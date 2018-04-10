@@ -34,8 +34,12 @@ NS_ASSUME_NONNULL_BEGIN
 @implementation FSTMemorySpecTests
 
 /** Overrides -[FSTSpecTests persistence] */
-- (id<FSTPersistence>)persistence {
-  return [FSTPersistenceTestHelpers memoryPersistence];
+- (id<FSTPersistence>)persistence:(BOOL)enableGC {
+  if (enableGC) {
+    return [FSTPersistenceTestHelpers eagerGCMemoryPersistence];
+  } else {
+    return [FSTPersistenceTestHelpers noGCMemoryPersistence];
+  }
 }
 @end
 

@@ -33,7 +33,7 @@ NS_ASSUME_NONNULL_BEGIN
 @implementation FSTMemoryLocalStoreTests
 
 - (id<FSTPersistence>)persistence {
-  return [FSTPersistenceTestHelpers memoryPersistence];
+  return [FSTPersistenceTestHelpers eagerGCMemoryPersistence];
 }
 
 @end

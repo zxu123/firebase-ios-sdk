@@ -37,7 +37,7 @@
 - (void)setUp {
   [super setUp];
 
-  self.persistence = [FSTPersistenceTestHelpers memoryPersistence];
+  self.persistence = [FSTPersistenceTestHelpers eagerGCMemoryPersistence];
   self.remoteDocumentCache = [self.persistence remoteDocumentCache];
 }
 
