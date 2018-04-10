@@ -21,6 +21,7 @@
 
 #include <map>
 #include <utility>
+#import <FirebaseFirestore/FIRFirestore.h>
 
 #import "Firestore/Source/Core/FSTEventManager.h"
 #import "Firestore/Source/Core/FSTQuery.h"
@@ -633,6 +634,7 @@ static NSString *const kNoIOSTag = @"no-ios";
 - (void)testSpecTests {
   if ([self isTestBaseClass]) return;
 
+  [FIRFirestore enableLogging:YES];
   // Enumerate the .json files containing the spec tests.
   NSMutableArray<NSString *> *specFiles = [NSMutableArray array];
   NSMutableArray<NSDictionary *> *parsedSpecs = [NSMutableArray array];
@@ -640,8 +642,7 @@ static NSString *const kNoIOSTag = @"no-ios";
   NSFileManager *fs = [NSFileManager defaultManager];
   BOOL exclusiveMode = NO;
   for (NSString *file in [fs enumeratorAtPath:[bundle bundlePath]]) {
-    //if (![@"json" isEqual:[file pathExtension]]) {
-    if (![file isEqualToString:@"listen_spec_test.json"]) {
+    if (![@"json" isEqual:[file pathExtension]]) {
       continue;
     }
 

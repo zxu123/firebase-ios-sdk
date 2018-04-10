@@ -106,8 +106,13 @@ NS_ASSUME_NONNULL_BEGIN
   return (int32_t)[self.queries count];
 }
 
-- (void)removeQueryData:(FSTQueryData *)queryData {
+- (void)removeQueryData:(FSTQueryData *)queryData sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
   [self.queries removeObjectForKey:queryData.query];
+  [self.references enumerateReferencesForID:queryData.targetID block:^(FSTDocumentReference *ref, BOOL *stop) {
+    [self->_persistence.referenceDelegate removeReference:ref.key
+                                                   target:queryData.targetID
+                                           sequenceNumber:sequenceNumber];
+  }];
   [self.references removeReferencesForID:queryData.targetID];
 }
 

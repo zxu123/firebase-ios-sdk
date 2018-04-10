@@ -433,15 +433,16 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
     [self.localViewReferences removeReferencesForID:queryData.targetID];
     // TODO(gsoltis): kill this if statement, give GC a reference to query cache,
     // call removeQueryData on GC, not queryCache.
+    FSTListenSequenceNumber sequenceNumber = [self.listenSequence next];
     if (self.garbageCollector.isEager) {
-      [self.queryCache removeQueryData:queryData];
+      [self.queryCache removeQueryData:queryData sequenceNumber:sequenceNumber];
     }
     [self.targetIDs removeObjectForKey:@(queryData.targetID)];
 
     // If this was the last watch target, then we won't get any more watch snapshots, so we should
     // release any held batch results.
     if ([self.targetIDs count] == 0) {
-      [self releaseHeldBatchResultsAtSequenceNumber:[self.listenSequence next]];
+      [self releaseHeldBatchResultsAtSequenceNumber:sequenceNumber];
     }
   });
 }

@@ -97,7 +97,7 @@ enum FSTRemovalResult {
 - (void)updateQueryData:(FSTQueryData *)queryData;
 
 /** Removes the cached entry for the given query data (no-op if no entry exists). */
-- (void)removeQueryData:(FSTQueryData *)queryData;
+- (void)removeQueryData:(FSTQueryData *)queryData sequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
 
 - (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData, BOOL *stop))block;
 
