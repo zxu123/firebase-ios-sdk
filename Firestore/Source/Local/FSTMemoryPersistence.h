@@ -53,7 +53,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence;
 
-@property(strong, nonatomic, readonly) FSTLRUGarbageCollector *gc;
+- (BOOL)isPinnedAtSequenceNumber:(FSTListenSequenceNumber)upperBound document:(FSTDocumentKey *)key;
 
 @end
 

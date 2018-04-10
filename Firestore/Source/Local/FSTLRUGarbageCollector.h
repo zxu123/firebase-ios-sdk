@@ -31,15 +31,19 @@ struct FSTLRUThreshold {
   }
 };
 
-@protocol FSTLRUDelegate<FSTSequenceNumberPersistence>
+@class FSTLRUGarbageCollector;
+
+@protocol FSTLRUDelegate
 
 - (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData, BOOL *stop))block;
 
 - (void)enumerateMutationsUsingBlock:(void (^)(FSTDocumentKey *key, FSTListenSequenceNumber sequenceNumber, BOOL *stop))block;
 
-- (void)removeOrphanedDocumentsThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
+- (NSUInteger)removeOrphanedDocumentsThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
 
 - (NSUInteger)removeQueriesThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber liveQueries:(NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries;
+
+@property(strong, nonatomic, readonly) FSTLRUGarbageCollector *gc;
 
 @end
 

@@ -19,11 +19,6 @@ NS_ASSUME_NONNULL_BEGIN
   return [persistence byteSize];
 }
 
-- (FSTLRUGarbageCollector *)gcForPersistence:(id<FSTPersistence>)persistence {
-  FSTMemoryLRUReferenceDelegate *delegate = (FSTMemoryLRUReferenceDelegate *)persistence.referenceDelegate;
-  return delegate.gc;
-}
-
 @end
 
 NS_ASSUME_NONNULL_END

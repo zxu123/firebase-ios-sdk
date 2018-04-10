@@ -24,22 +24,29 @@
 #import "Firestore/Source/Local/FSTLevelDBMutationQueue.h"
 #import "Firestore/Source/Local/FSTLevelDBQueryCache.h"
 #import "Firestore/Source/Local/FSTLevelDBRemoteDocumentCache.h"
+#import "Firestore/Source/Local/FSTLRUGarbageCollector.h"
+#import "Firestore/Source/Local/FSTReferenceSet.h"
 #import "Firestore/Source/Remote/FSTSerializerBeta.h"
 #import "Firestore/Source/Util/FSTAssert.h"
 #import "Firestore/Source/Util/FSTLogger.h"
-
 #include "Firestore/core/src/firebase/firestore/auth/user.h"
 #include "Firestore/core/src/firebase/firestore/core/database_info.h"
 #include "Firestore/core/src/firebase/firestore/local/leveldb_transaction.h"
 #include "Firestore/core/src/firebase/firestore/model/database_id.h"
+#include "Firestore/core/src/firebase/firestore/model/resource_path.h"
+#include "Firestore/core/src/firebase/firestore/util/ordered_code.h"
 #include "Firestore/core/src/firebase/firestore/util/string_apple.h"
+#include "Firestore/core/src/firebase/firestore/util/string_util.h"
 #include "absl/memory/memory.h"
+#include "absl/strings/match.h"
 #include "leveldb/db.h"
 
 namespace util = firebase::firestore::util;
 using firebase::firestore::auth::User;
 using firebase::firestore::core::DatabaseInfo;
 using firebase::firestore::model::DatabaseId;
+using firebase::firestore::model::ResourcePath;
+using util::OrderedCode;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -53,6 +60,86 @@ using leveldb::ReadOptions;
 using leveldb::Status;
 using leveldb::WriteOptions;
 
+@interface FSTLevelDBLRUDelegate : NSObject<FSTReferenceDelegate, FSTLRUDelegate>
+@end
+
+@implementation FSTLevelDBLRUDelegate {
+  FSTLRUGarbageCollector *_gc;
+  FSTLevelDB *_db;
+  FSTReferenceSet *_additionalReferences;
+}
+
+- (instancetype)initWithPersistence:(FSTLevelDB *)persistence {
+  if (self = [super init]) {
+    _gc = [[FSTLRUGarbageCollector alloc] initWithQueryCache:[persistence queryCache]
+                                                    delegate:self
+                                                  thresholds:FSTLRUThreshold::Defaults()
+                                                         now:0];
+    _db = persistence;
+  }
+  return self;
+}
+
+- (void)addReferenceSet:(FSTReferenceSet *)set {
+  // Technically can't assert this, due to restartWithNoopGarbageCollector (for now...)
+  //FSTAssert(_additionalReferences == nil, @"Overwriting additional references");
+  _additionalReferences = set;
+}
+
+- (BOOL)mutationQueuesContainKey:(FSTDocumentKey *)docKey {
+  const std::set<std::string>& users = _db.users;
+  const ResourcePath& path = [docKey path];
+  std::string buffer;
+  auto it = _db.currentTransaction->NewIterator();
+  // For each user, if there is any batch that contains this document in any batch, we know it's pinned.
+  for (auto user = users.begin(); user != users.end(); ++user) {
+    std::string mutationKey = [FSTLevelDBDocumentMutationKey keyPrefixWithUserID:*user resourcePath:path];
+    it->Seek(mutationKey);
+    if (it->Valid() && absl::StartsWith(it->key(), mutationKey)) {
+      return YES;
+    }
+  }
+  return NO;
+}
+
+- (BOOL)isPinned:(FSTDocumentKey *)docKey {
+  if ([_additionalReferences containsKey:docKey]) {
+    return YES;
+  }
+  if ([self mutationQueuesContainKey:docKey]) {
+    return YES;
+  }
+  return NO;
+}
+
+- (NSUInteger)removeOrphanedDocumentsThroughSequenceNumber:(FSTListenSequenceNumber)upperBound {
+  FSTLevelDBQueryCache *queryCache = _db.queryCache;
+  __block NSUInteger count = 0;
+  [queryCache enumerateOrphanedDocumentsUsingBlock:^(FSTDocumentKey *docKey, FSTListenSequenceNumber sequenceNumber, BOOL *stop) {
+    if (sequenceNumber <= upperBound) {
+      if (![self isPinned:docKey]) {
+        count++;
+        [_db.remoteDocumentCache removeEntryForKey:docKey];
+      }
+    }
+  }];
+  return count;
+}
+
+- (FSTLRUGarbageCollector *)gc {
+  return _gc;
+}
+
+- (void)removeMutationReference:(FSTDocumentKey *)key
+                 sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  std::string encodedSequenceNumber;
+  OrderedCode::WriteSignedNumIncreasing(&encodedSequenceNumber, sequenceNumber);
+  std::string sentinelKey = [FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:key];
+  _db.currentTransaction->Put(sentinelKey, encodedSequenceNumber);
+}
+
+@end
+
 @interface FSTLevelDB ()
 
 @property(nonatomic, copy) NSString *directory;
@@ -64,6 +151,9 @@ using leveldb::WriteOptions;
 @implementation FSTLevelDB {
   std::unique_ptr<LevelDbTransaction> _transaction;
   FSTTransactionRunner _transactionRunner;
+  FSTLevelDBLRUDelegate *_referenceDelegate;
+  FSTLevelDBQueryCache *_queryCache;
+  std::set<std::string> _users;
 }
 
 /**
@@ -75,18 +165,45 @@ using leveldb::WriteOptions;
   return options;
 }
 
++ (std::set<std::string>)collectUserSet:(LevelDbTransaction *)transaction {
+  std::set<std::string> users{};
+
+  std::string tablePrefix = [FSTLevelDBMutationKey keyPrefix];
+  auto it = transaction->NewIterator();
+  it->Seek(tablePrefix);
+  FSTLevelDBMutationKey *rowKey = [[FSTLevelDBMutationKey alloc] init];
+  while (it->Valid() && absl::StartsWith(it->key(), tablePrefix) && [rowKey decodeKey:it->key()]) {
+    users.insert(rowKey.userID);
+
+    auto userEnd = [FSTLevelDBMutationKey keyPrefixWithUserID:rowKey.userID];
+    userEnd = util::PrefixSuccessor(userEnd);
+    it->Seek(userEnd);
+  }
+  return users;
+}
+
 - (instancetype)initWithDirectory:(NSString *)directory
                        serializer:(FSTLocalSerializer *)serializer {
   if (self = [super init]) {
     _directory = [directory copy];
     _serializer = serializer;
+    _queryCache = [[FSTLevelDBQueryCache alloc] initWithDB:self serializer:self.serializer];
+    _referenceDelegate = [[FSTLevelDBLRUDelegate alloc] initWithPersistence:self];
     _transactionRunner.SetBackingPersistence(self);
   }
   return self;
 }
 
+- (const std::set<std::string>&)users {
+  return _users;
+}
+
 - (const FSTTransactionRunner &)run {
   return _transactionRunner;
+}
+
+- (id<FSTReferenceDelegate>)referenceDelegate {
+  return _referenceDelegate;
 }
 
 + (NSString *)documentsDirectory {
@@ -147,9 +264,17 @@ using leveldb::WriteOptions;
     return NO;
   }
   _ptr.reset(database);
-  LevelDbTransaction transaction(_ptr.get(), "Start LevelDB");
-  [FSTLevelDBMigrations runMigrationsWithTransaction:&transaction];
-  transaction.Commit();
+  {
+    LevelDbTransaction transaction(_ptr.get(), "Start LevelDB");
+    [FSTLevelDBMigrations runMigrationsWithTransaction:&transaction];
+    transaction.Commit();
+  }
+  {
+    LevelDbTransaction transaction(_ptr.get(), "Collect users");
+    _users = [FSTLevelDB collectUserSet:&transaction];
+    // Should be a noop.
+    transaction.Commit();
+  }
   return YES;
 }
 
@@ -217,11 +342,12 @@ using leveldb::WriteOptions;
 #pragma mark - Persistence Factory methods
 
 - (id<FSTMutationQueue>)mutationQueueForUser:(const User &)user {
+  _users.insert(user.uid());
   return [FSTLevelDBMutationQueue mutationQueueWithUser:user db:self serializer:self.serializer];
 }
 
 - (id<FSTQueryCache>)queryCache {
-  return [[FSTLevelDBQueryCache alloc] initWithDB:self serializer:self.serializer];
+  return _queryCache;
 }
 
 - (id<FSTRemoteDocumentCache>)remoteDocumentCache {
@@ -242,6 +368,8 @@ using leveldb::WriteOptions;
 - (void)shutdown {
   FSTAssert(self.isStarted, @"FSTLevelDB shutdown without start!");
   self.started = NO;
+  _queryCache = nil;
+  _referenceDelegate = nil;
   _ptr.reset();
 }
 

@@ -107,12 +107,6 @@ struct FSTTransactionRunner;
 
 extern const FSTListenSequenceNumber kFSTListenSequenceNumberInvalid;
 
-@protocol FSTSequenceNumberPersistence
-
-- (BOOL)isPinnedAtSequenceNumber:(FSTListenSequenceNumber)upperBound document:(FSTDocumentKey *)key;
-
-@end
-
 @protocol FSTReferenceDelegate<FSTTransactional>
 
 - (void)addReferenceSet:(FSTReferenceSet *)set;

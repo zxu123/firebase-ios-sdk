@@ -222,6 +222,7 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   FSTMemoryPersistence *_persistence;
   NSMutableDictionary<FSTDocumentKey *, NSNumber *> *_sequenceNumbers;
   FSTReferenceSet *_additionalReferences;
+  FSTLRUGarbageCollector *_gc;
 }
 
 - (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence {
@@ -234,6 +235,10 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
                                                          now:0];
   }
   return self;
+}
+
+- (FSTLRUGarbageCollector *)gc {
+  return _gc;
 }
 
 - (void)addReferenceSet:(FSTReferenceSet *)set {
@@ -268,6 +273,10 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   return [_persistence.queryCache removeQueriesThroughSequenceNumber:sequenceNumber liveQueries:liveQueries];
 }
 
+- (NSUInteger)removeOrphanedDocumentsThroughSequenceNumber:(FSTListenSequenceNumber)upperBound {
+  return [(FSTMemoryRemoteDocumentCache *)_persistence.remoteDocumentCache removeOrphanedDocuments:self
+                                                                             throughSequenceNumber:upperBound];
+}
 
 - (void)addReference:(FSTDocumentKey *)key target:(FSTTargetID)targetID sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
   _sequenceNumbers[key] = @(sequenceNumber);
@@ -278,11 +287,6 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
 }
 
 
-- (void)removeMutationReference:(FSTDocumentKey *)key
-                 sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
-  _sequenceNumbers[key] = @(sequenceNumber);
-}
-
 - (BOOL)mutationQueuesContainKey:(FSTDocumentKey *)key {
   const MutationQueues& queues = [_persistence mutationQueues];
   for (auto it = queues.begin(); it != queues.end(); ++it) {
@@ -291,6 +295,11 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
     }
   }
   return NO;
+}
+
+- (void)removeMutationReference:(FSTDocumentKey *)key
+                 sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  _sequenceNumbers[key] = @(sequenceNumber);
 }
 
 - (BOOL)isPinnedAtSequenceNumber:(FSTListenSequenceNumber)upperBound document:(FSTDocumentKey *)key {

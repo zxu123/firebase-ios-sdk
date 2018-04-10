@@ -20,9 +20,14 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+@class FSTMemoryLRUReferenceDelegate;
+
 @interface FSTMemoryRemoteDocumentCache : NSObject <FSTRemoteDocumentCache>
 
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
+
+- (NSUInteger)removeOrphanedDocuments:(FSTMemoryLRUReferenceDelegate *)referenceDelegate
+                throughSequenceNumber:(FSTListenSequenceNumber)upperBound;
 
 - (long)byteSize;
 

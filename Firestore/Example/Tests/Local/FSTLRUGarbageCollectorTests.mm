@@ -53,7 +53,8 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (FSTLRUGarbageCollector *)gcForPersistence:(id<FSTPersistence>)persistence {
-  @throw FSTAbstractMethodException();  // NOLINT
+  id<FSTLRUDelegate> delegate = (id<FSTLRUDelegate>)persistence.referenceDelegate;
+  return delegate.gc;
 }
 
 - (void)setUp {

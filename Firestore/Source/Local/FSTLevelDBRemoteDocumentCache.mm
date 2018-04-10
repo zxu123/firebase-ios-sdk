@@ -132,6 +132,19 @@ using leveldb::Status;
   return maybeDocument;
 }
 
+/*- (NSUInteger)removeOrphanedDocuments:(id<FSTSequenceNumberPersistence>)sequenceNumberPersistence
+                throughSequenceNumber:(FSTListenSequenceNumber)upperBound {
+  __block NSUInteger count = 0;
+  [_db.queryCache enumerateOrphanedDocumentsUsingBlock:^(FSTDocumentKey *docKey, FSTListenSequenceNumber sequenceNumber, BOOL *stop) {
+    if (![sequenceNumberPersistence isPinnedAtSequenceNumber:upperBound document:docKey]) {
+      [self removeEntryForKey:docKey];
+      NSLog(@"Removing %@", docKey);
+      count++;
+    }
+  }];
+  return count;
+}*/
+
 - (NSUInteger)removeOrphanedDocuments:(id<FSTQueryCache>)queryCache
                 throughSequenceNumber:(FSTListenSequenceNumber)upperBound
                         mutationQueue:(id<FSTMutationQueue>)mutationQueue {

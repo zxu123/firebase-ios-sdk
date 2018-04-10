@@ -124,11 +124,7 @@ class RollingSequenceNumberBuffer {
 - (NSUInteger)removeOrphanedDocuments:(id<FSTRemoteDocumentCache>)remoteDocumentCache
                 throughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
                         mutationQueue:(id<FSTMutationQueue>)mutationQueue {
-  /*return [remoteDocumentCache removeOrphanedDocuments:self.queryCache
-                                throughSequenceNumber:sequenceNumber
-                                        mutationQueue:mutationQueue];*/
-  return [remoteDocumentCache removeOrphanedDocuments:_delegate
-                                throughSequenceNumber:sequenceNumber];
+  return [_delegate removeOrphanedDocumentsThroughSequenceNumber:sequenceNumber];
 }
 
 - (void)collectGarbageWithLiveQueries:(NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries
