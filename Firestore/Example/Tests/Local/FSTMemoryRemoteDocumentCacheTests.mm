@@ -42,10 +42,9 @@
 }
 
 - (void)tearDown {
+  [super tearDown];
   self.persistence = nil;
   self.remoteDocumentCache = nil;
-
-  [super tearDown];
 }
 
 - (void)testByteSize {

@@ -158,6 +158,12 @@ using leveldb::WriteOptions;
   _db.currentTransaction->Put(sentinelKey, encodedSequenceNumber);
 }
 
+- (void)documentUpdated:(FSTDocumentKey *)key {
+  // Not a no-op. *if* this document is not referenced, it will be leaked because we don't assign a sequence number
+  // TODO(gsoltis): implement this
+}
+
+
 @end
 
 @interface FSTLevelDB ()

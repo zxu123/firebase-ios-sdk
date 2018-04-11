@@ -256,6 +256,10 @@ FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
   }
 }
 
+- (void)removeQueryData:(FSTQueryData *)queryData sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  // No-op, called from local store.
+}
+
 - (void)removeQueryData:(FSTQueryData *)queryData {
   FSTTargetID targetID = queryData.targetID;
 

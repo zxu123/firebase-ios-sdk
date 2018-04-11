@@ -434,9 +434,9 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
     // TODO(gsoltis): kill this if statement, give GC a reference to query cache,
     // call removeQueryData on GC, not queryCache.
     FSTListenSequenceNumber sequenceNumber = [self.listenSequence next];
-    if (self.garbageCollector.isEager) {
+    //if (self.garbageCollector.isEager) {
       [self.queryCache removeQueryData:queryData sequenceNumber:sequenceNumber];
-    }
+    //}
     [self.targetIDs removeObjectForKey:@(queryData.targetID)];
 
     // If this was the last watch target, then we won't get any more watch snapshots, so we should

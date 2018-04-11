@@ -34,7 +34,7 @@ NS_ASSUME_NONNULL_BEGIN
 @implementation FSTLevelDBSpecTests
 
 /** Overrides -[FSTSpecTests persistence] */
-- (id<FSTPersistence>)persistence {
+- (id<FSTPersistence>)persistence:(BOOL)enableGC {
   return [FSTPersistenceTestHelpers levelDBPersistence];
 }
 
