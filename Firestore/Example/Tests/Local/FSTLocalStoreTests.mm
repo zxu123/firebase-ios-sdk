@@ -735,17 +735,6 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   FSTAssertNotContains(@"foo/bar");
   FSTAssertNotContains(@"foo/baz");
-
-  // Now that we're adding sentinel rows, we need to verify that they are cleaned up when documents are
-  // successfully GC'd, even with the eager GC. Verify that the sentinel row for one of the docs we deleted
-  // is in fact gone.
-  id<FSTQueryCache> queryCache = [self queryCache];
-  FSTDocumentKey *key = FSTTestDocKey(@"foo/bar");
-  BOOL removed = self.localStorePersistence.run("check doc removed", [&]() -> BOOL {
-    return [queryCache removeOrphanedDocument:key upperBound:INT64_MAX] == FSTDocumentRemoved;
-  });
-  // We should have already removed this document, so we should be unable to remove it now
-  XCTAssertFalse(removed);
 }
 
 - (id<FSTQueryCache>)queryCache {

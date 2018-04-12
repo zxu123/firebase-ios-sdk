@@ -36,9 +36,6 @@ NS_ASSUME_NONNULL_BEGIN
 /** Maps a query to the data about that query. */
 @property(nonatomic, strong, readonly) NSMutableDictionary<FSTQuery *, FSTQueryData *> *queries;
 
-@property(nonatomic, strong, readonly)
-    NSMutableDictionary<FSTDocumentKey *, NSNumber *> *orphanedDocumentSequenceNumbers;
-
 /** A ordered bidirectional mapping between documents and the remote target IDs. */
 @property(nonatomic, strong, readonly) FSTReferenceSet *references;
 
@@ -60,7 +57,6 @@ NS_ASSUME_NONNULL_BEGIN
   if (self = [super init]) {
     _persistence = persistence;
     _queries = [NSMutableDictionary dictionary];
-    _orphanedDocumentSequenceNumbers = [NSMutableDictionary dictionary];
     _references = [[FSTReferenceSet alloc] init];
     _lastRemoteSnapshotVersion = [FSTSnapshotVersion noVersion];
   }
@@ -122,15 +118,6 @@ NS_ASSUME_NONNULL_BEGIN
       }];
 }
 
-- (void)enumerateOrphanedDocumentsUsingBlock:
-    (void (^)(FSTDocumentKey *docKey, FSTListenSequenceNumber sequenceNumber, BOOL *stop))block {
-  [self.orphanedDocumentSequenceNumbers
-      enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, NSNumber *sequenceNumber,
-                                          BOOL *stop) {
-        block(key, [sequenceNumber longLongValue], stop);
-      }];
-}
-
 - (NSUInteger)removeQueriesThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
                                      liveQueries:
                                          (NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries {
@@ -149,14 +136,6 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 #pragma mark Reference tracking
-
-- (void)addPotentiallyOrphanedDocuments:(FSTDocumentKeySet *)keys
-                       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
-  NSNumber *seqNum = @(sequenceNumber);
-  [keys enumerateObjectsUsingBlock:^(FSTDocumentKey *key, BOOL *stop) {
-    self.orphanedDocumentSequenceNumbers[key] = seqNum;
-  }];
-}
 
 - (void)addMatchingKeys:(FSTDocumentKeySet *)keys
             forTargetID:(FSTTargetID)targetID
@@ -192,74 +171,10 @@ NS_ASSUME_NONNULL_BEGIN
   return [self.references referencedKeysForID:targetID];
 }
 
-- (FSTRemovalResult)removeOrphanedDocument:(FSTDocumentKey *)key
-                    upperBound:(FSTListenSequenceNumber)upperBound {
-  NSNumber *seq = self.orphanedDocumentSequenceNumbers[key];
-  if (!seq) {
-    return FSTDocumentNonexistent;
-  } else if ([seq longLongValue] <= upperBound) {
-    [self.orphanedDocumentSequenceNumbers removeObjectForKey:key];
-    return FSTDocumentRemoved;
-  } else {
-    return FSTDocumentRetained;
-  }
-}
-
-- (nullable FSTQueryData *)handleTargetChange:(FSTTargetChange *)change
-                                    queryData:(FSTQueryData *)queryData
-                                     orphaned:(std::set<FSTDocumentKey *> &)orphaned {
-  FSTTargetMapping *mapping = change.mapping;
-  if (mapping) {
-    // First make sure that all references are deleted.
-    if ([mapping isKindOfClass:[FSTResetMapping class]]) {
-      FSTResetMapping *reset = (FSTResetMapping *)mapping;
-      [self.references enumerateReferencesForID:queryData.targetID block:^(FSTDocumentReference *ref, BOOL *stop) {
-        [self.references removeReference:ref];
-        FSTDocumentKey* key = ref.key;
-        [_persistence.referenceDelegate removeReference:key
-                                                 target:queryData.targetID
-                                         sequenceNumber:queryData.sequenceNumber];
-      }];
-
-      for (FSTDocumentKey *key in [reset.documents objectEnumerator]) {
-        [self.orphanedDocumentSequenceNumbers removeObjectForKey:key];
-        [_persistence.referenceDelegate addReference:key
-                                              target:queryData.targetID
-                                      sequenceNumber:queryData.sequenceNumber];
-        [self.references addReferenceToKey:key forID:queryData.targetID];
-      }
-    } else if ([mapping isKindOfClass:[FSTUpdateMapping class]]) {
-      FSTUpdateMapping *update = (FSTUpdateMapping *)mapping;
-      for (FSTDocumentKey *key in [update.removedDocuments objectEnumerator]) {
-        [self.references removeReferenceToKey:key forID:queryData.targetID];
-        [_persistence.referenceDelegate removeReference:key
-                                                 target:queryData.targetID
-                                         sequenceNumber:queryData.sequenceNumber];
-      }
-
-      for (FSTDocumentKey *key in [update.addedDocuments objectEnumerator]) {
-        [self.orphanedDocumentSequenceNumbers removeObjectForKey:key];
-        [_persistence.referenceDelegate addReference:key
-                                              target:queryData.targetID
-                                      sequenceNumber:queryData.sequenceNumber];
-        [self.references addReferenceToKey:key forID:queryData.targetID];
-      }
-    } else {
-      FSTFail(@"Unknown mapping type: %@", mapping);
-    }
-  }
-  return queryData;
-}
-
 #pragma mark - Sizing
 
 - (long)byteSize {
   __block long result = 0;
-  [self.orphanedDocumentSequenceNumbers
-      enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, NSNumber *obj, BOOL *stop) {
-        result += [FSTMemoryPersistence pathSizeInMemory:key.path];
-        result += sizeof(int64_t);  // account for the number
-      }];
   [self.queries
       enumerateKeysAndObjectsUsingBlock:^(FSTQuery *query, FSTQueryData *queryData, BOOL *stop) {
         // The queryData also includes the query, so we can use that calculation twice.

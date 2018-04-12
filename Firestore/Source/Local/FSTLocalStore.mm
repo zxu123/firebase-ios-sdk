@@ -462,16 +462,17 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
 
 - (void)collectGarbage {
   self.persistence.run("Garbage Collection", [&]() {
+    return;
     // Call collectGarbage regardless of whether isGCEnabled so the referenceSet doesn't continue to
     // accumulate the garbage keys.
-    std::set<DocumentKey> garbage = [self.garbageCollector collectGarbage];
+    /*std::set<DocumentKey> garbage = [self.garbageCollector collectGarbage];
     if (garbage.size() > 0) {
       for (const DocumentKey &key : garbage) {
         [self.remoteDocumentCache removeEntryForKey:key];
         FSTRemovalResult removed = [self.queryCache removeOrphanedDocument:key upperBound:kMaxListenNumber];
         FSTAssert(removed != FSTDocumentRetained, @"Failed to remove orphaned document: %s", key.ToString().c_str());
       }
-    }
+    }*/
   });
 }
 

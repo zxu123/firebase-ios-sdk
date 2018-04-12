@@ -132,42 +132,6 @@ using leveldb::Status;
   return maybeDocument;
 }
 
-/*- (NSUInteger)removeOrphanedDocuments:(id<FSTSequenceNumberPersistence>)sequenceNumberPersistence
-                throughSequenceNumber:(FSTListenSequenceNumber)upperBound {
-  __block NSUInteger count = 0;
-  [_db.queryCache enumerateOrphanedDocumentsUsingBlock:^(FSTDocumentKey *docKey, FSTListenSequenceNumber sequenceNumber, BOOL *stop) {
-    if (![sequenceNumberPersistence isPinnedAtSequenceNumber:upperBound document:docKey]) {
-      [self removeEntryForKey:docKey];
-      NSLog(@"Removing %@", docKey);
-      count++;
-    }
-  }];
-  return count;
-}*/
-
-- (NSUInteger)removeOrphanedDocuments:(id<FSTQueryCache>)queryCache
-                throughSequenceNumber:(FSTListenSequenceNumber)upperBound
-                        mutationQueue:(id<FSTMutationQueue>)mutationQueue {
-  __block NSUInteger count = 0;
-  [queryCache enumerateOrphanedDocumentsUsingBlock:^(
-                  FSTDocumentKey *docKey, FSTListenSequenceNumber sequenceNumber, BOOL *stop) {
-    if (![mutationQueue containsKey:docKey] && ![queryCache containsKey:docKey] &&
-        // We do sequence number comparison here so we can avoid a read in the
-        // queryCache. This is a little bit of a hack, and stems from the fact that
-        // we know this is the leveldb query cache. The memory query cache needs the
-        // upper bound since it works by scanning all docs because it doesn't track
-        // documents removed from a query.
-        //
-        // TODO(gsoltis): make this cleaner
-        sequenceNumber <= upperBound &&
-        [queryCache removeOrphanedDocument:docKey upperBound:upperBound] == FSTDocumentRemoved) {
-      [self removeEntryForKey:docKey];
-      count++;
-    }
-  }];
-  return count;
-}
-
 @end
 
 NS_ASSUME_NONNULL_END

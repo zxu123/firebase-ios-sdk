@@ -29,12 +29,6 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-enum FSTRemovalResult {
-  FSTDocumentRemoved,
-  FSTDocumentNonexistent,
-  FSTDocumentRetained
-};
-
 /**
  * Represents cached queries received from the remote backend. This contains both a mapping between
  * queries and the documents that matched them according to the server, but also metadata about the
@@ -101,9 +95,6 @@ enum FSTRemovalResult {
 
 - (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData, BOOL *stop))block;
 
-- (void)enumerateOrphanedDocumentsUsingBlock:
-    (void (^)(FSTDocumentKey *docKey, FSTListenSequenceNumber sequenceNumber, BOOL *stop))block;
-
 - (NSUInteger)removeQueriesThroughSequenceNumber:(FSTListenSequenceNumber)sequenceNumber
                                      liveQueries:
                                          (NSDictionary<NSNumber *, FSTQueryData *> *)liveQueries;
@@ -133,14 +124,7 @@ enum FSTRemovalResult {
 /** Removes all the keys in the query results of the given target ID. */
 - (void)removeMatchingKeysForTargetID:(FSTTargetID)targetID;
 
-- (FSTRemovalResult)removeOrphanedDocument:(FSTDocumentKey *)key upperBound:(FSTListenSequenceNumber)upperBound;
-
 - (FSTDocumentKeySet *)matchingKeysForTargetID:(FSTTargetID)targetID;
-
-// TODO(gsoltis): Think about:
-- (nullable FSTQueryData *)handleTargetChange:(FSTTargetChange *)change
-                                     queryData:(FSTQueryData *)queryData
-                                     orphaned:(std::set<FSTDocumentKey *> &)orphaned;
 
 @end
 

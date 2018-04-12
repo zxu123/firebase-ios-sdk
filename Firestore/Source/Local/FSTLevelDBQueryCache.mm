@@ -431,26 +431,6 @@ FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
   }
 }
 
-- (FSTRemovalResult)removeOrphanedDocument:(FSTDocumentKey *)key
-                                upperBound:(FSTListenSequenceNumber)upperBound {
-  std::string sentinelKey = [FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:key];
-  std::string sequenceNumberString;
-  Status status = _db.currentTransaction->Get(sentinelKey, &sequenceNumberString);
-  if (status.IsNotFound()) {
-    return FSTDocumentNonexistent;
-  } else if (status.ok()) {
-    FSTListenSequenceNumber sequenceNumber = ReadSequenceNumber(sequenceNumberString);
-    if (sequenceNumber <= upperBound) {
-      _db.currentTransaction->Delete(sentinelKey);
-      return FSTDocumentRemoved;
-    } else {
-      return FSTDocumentRetained;
-    }
-  } else {
-    FSTFail(@"Failed trying to query sentinel key %s", sentinelKey.c_str());
-  }
-}
-
 - (FSTDocumentKeySet *)matchingKeysForTargetID:(FSTTargetID)targetID {
   std::string indexPrefix = [FSTLevelDBTargetDocumentKey keyPrefixWithTargetID:targetID];
   auto indexIterator = _db.currentTransaction->NewIterator();
@@ -470,84 +450,6 @@ FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
   }
 
   return result;
-}
-
-- (nullable FSTQueryData *)handleTargetChange:(FSTTargetChange *)change
-                                    queryData:(FSTQueryData *)queryData
-                                     orphaned:(std::set<FSTDocumentKey *> &)orphaned {
-  std::string emptyBuffer;
-  std::string encodedSequenceNumber;
-  OrderedCode::WriteSignedNumIncreasing(&encodedSequenceNumber, queryData.sequenceNumber);
-  FSTTargetMapping *mapping = change.mapping;
-  if (mapping) {
-    // First make sure that all references are deleted.
-    if ([mapping isKindOfClass:[FSTResetMapping class]]) {
-      FSTResetMapping *reset = (FSTResetMapping *) mapping;
-      std::string targetDocumentPrefix = [FSTLevelDBTargetDocumentKey keyPrefixWithTargetID:queryData.targetID];
-      auto targetDocumentIterator = _db.currentTransaction->NewIterator();
-      targetDocumentIterator->Seek(targetDocumentPrefix);
-      FSTLevelDBTargetDocumentKey *targetDocumentKey = [[FSTLevelDBTargetDocumentKey alloc] init];
-      for (; targetDocumentIterator->Valid() &&
-                     absl::StartsWith(targetDocumentIterator->key(), targetDocumentPrefix);
-              targetDocumentIterator->Next()) {
-        absl::string_view currentTargetDocumentKey = targetDocumentIterator->key();
-        if (![targetDocumentKey decodeKey:currentTargetDocumentKey]) {
-          break;
-        }
-        std::string docTargetKey =
-                [FSTLevelDBDocumentTargetKey keyWithDocumentKey:targetDocumentKey.documentKey
-                                                       targetID:targetDocumentKey.targetID];
-        _db.currentTransaction->Delete(currentTargetDocumentKey);
-        _db.currentTransaction->Delete(docTargetKey);
-
-        FSTDocumentKey *docKey = targetDocumentKey.documentKey;
-        if (![self containsKey:docKey] && ![reset.documents containsObject:docKey]) {
-          orphaned.insert(docKey);
-        }
-      }
-
-      for (FSTDocumentKey *key in [reset.documents objectEnumerator]) {
-        std::string sentinelKey = [FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:key];
-        _db.currentTransaction->Put(sentinelKey, encodedSequenceNumber);
-        orphaned.erase(key);
-
-        _db.currentTransaction->Put(
-                [FSTLevelDBTargetDocumentKey keyWithTargetID:queryData.targetID documentKey:key],
-                emptyBuffer);
-        _db.currentTransaction->Put(
-                [FSTLevelDBDocumentTargetKey keyWithDocumentKey:key targetID:queryData.targetID],
-                emptyBuffer);
-
-      }
-    } else if ([mapping isKindOfClass:[FSTUpdateMapping class]]) {
-      FSTUpdateMapping *update = (FSTUpdateMapping *)mapping;
-      for (FSTDocumentKey *key in [update.removedDocuments objectEnumerator]) {
-        std::string docTargetKey =
-                [FSTLevelDBDocumentTargetKey keyWithDocumentKey:key targetID:queryData.targetID];
-        _db.currentTransaction->Delete(docTargetKey);
-        std::string targetDocKey = [FSTLevelDBTargetDocumentKey keyWithTargetID:queryData.targetID documentKey:key];
-        _db.currentTransaction->Delete(targetDocKey);
-        orphaned.insert(key);
-      }
-
-      for (FSTDocumentKey *key in [update.addedDocuments objectEnumerator]) {
-        std::string sentinelKey = [FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:key];
-        _db.currentTransaction->Put(sentinelKey, encodedSequenceNumber);
-        orphaned.erase(key);
-
-        _db.currentTransaction->Put(
-                [FSTLevelDBTargetDocumentKey keyWithTargetID:queryData.targetID documentKey:key],
-                emptyBuffer);
-        _db.currentTransaction->Put(
-                [FSTLevelDBDocumentTargetKey keyWithDocumentKey:key targetID:queryData.targetID],
-                emptyBuffer);
-
-      }
-    } else {
-      FSTFail(@"Unknown mapping type: %@", mapping);
-    }
-  }
-  return queryData;
 }
 
 #pragma mark - FSTGarbageSource implementation
