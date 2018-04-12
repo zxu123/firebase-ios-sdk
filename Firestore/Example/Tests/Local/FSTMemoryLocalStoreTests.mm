@@ -36,6 +36,10 @@ NS_ASSUME_NONNULL_BEGIN
   return [FSTPersistenceTestHelpers eagerGCMemoryPersistence];
 }
 
+- (BOOL)gcIsEager {
+  return YES;
+}
+
 @end
 
 NS_ASSUME_NONNULL_END

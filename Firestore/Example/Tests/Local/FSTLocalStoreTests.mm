@@ -47,14 +47,6 @@ using firebase::firestore::auth::User;
 
 NS_ASSUME_NONNULL_BEGIN
 
-/** Creates a document version dictionary mapping the document in @a mutation to @a version. */
-FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
-                                                   FSTTestSnapshotVersion version) {
-  FSTDocumentVersionDictionary *result = [FSTDocumentVersionDictionary documentVersionDictionary];
-  result = [result dictionaryBySettingObject:FSTTestVersion(version) forKey:mutation.key];
-  return result;
-}
-
 @interface FSTLocalStoreTests ()
 
 @property(nonatomic, strong, readwrite) id<FSTPersistence> localStorePersistence;
@@ -98,6 +90,10 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   @throw FSTAbstractMethodException();  // NOLINT
 }
 
+- (BOOL)gcIsEager {
+  @throw FSTAbstractMethodException();  // NOLINT
+}
+
 /**
  * Xcode will run tests from any class that extends XCTestCase, but this doesn't work for
  * FSTLocalStoreTests since it is incomplete without the implementations supplied by its
@@ -105,15 +101,6 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
  */
 - (BOOL)isTestBaseClass {
   return [self class] == [FSTLocalStoreTests class];
-}
-
-/** Restarts the local store using the FSTNoOpGarbageCollector instead of the default. */
-- (void)restartWithNoopGarbageCollector {
-  id<FSTGarbageCollector> garbageCollector = [[FSTNoOpGarbageCollector alloc] init];
-  self.localStore = [[FSTLocalStore alloc] initWithPersistence:self.localStorePersistence
-                                              garbageCollector:garbageCollector
-                                                   initialUser:User::Unauthenticated()];
-  [self.localStore start];
 }
 
 - (void)writeMutation:(FSTMutation *)mutation {
@@ -241,8 +228,10 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   [self acknowledgeMutationWithVersion:0];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, NO) ]);
-  // Nothing is pinning this anymore, as it has been acknowledged and there are no targets active.
-  FSTAssertNotContains(@"foo/bar");
+  if ([self gcIsEager]) {
+    // Nothing is pinning this anymore, as it has been acknowledged and there are no targets active.
+    FSTAssertNotContains(@"foo/bar");
+  }
 }
 
 - (void)testHandlesSetMutationThenDocument {
@@ -310,7 +299,9 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   [self acknowledgeMutationWithVersion:3];
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 0, @{@"foo" : @"bar"}, NO) ]);
   // It has been acknowledged, and should no longer be retained as there is no target and mutation
-  FSTAssertNotContains(@"foo/bar");
+  if ([self gcIsEager]) {
+    FSTAssertNotContains(@"foo/bar");
+  }
 }
 
 - (void)testHandlesSetMutationThenDeletedDocument {
@@ -419,7 +410,9 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   [self acknowledgeMutationWithVersion:1];
   FSTAssertRemoved(@[ @"foo/bar" ]);
   // There's no target pinning the doc, and we've ack'd the mutation.
-  FSTAssertNotContains(@"foo/bar");
+  if ([self gcIsEager]) {
+    FSTAssertNotContains(@"foo/bar");
+  }
 }
 
 - (void)testHandlesDocumentThenDeleteMutationThenAck {
@@ -441,8 +434,10 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   [self.localStore releaseQuery:query];
   [self acknowledgeMutationWithVersion:2];
   FSTAssertRemoved(@[ @"foo/bar" ]);
-  // Neither the target nor the mutation pin the document, it should be gone.
-  FSTAssertNotContains(@"foo/bar");
+  if ([self gcIsEager]) {
+    // Neither the target nor the mutation pin the document, it should be gone.
+    FSTAssertNotContains(@"foo/bar");
+  }
 }
 
 - (void)testHandlesDeleteMutationThenDocumentThenAck {
@@ -466,8 +461,10 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   [self acknowledgeMutationWithVersion:2];
   FSTAssertRemoved(@[ @"foo/bar" ]);
-  // The doc is not pinned in a target and we've acknowledged the mutation. It shouldn't exist anymore.
-  FSTAssertNotContains(@"foo/bar");
+  if ([self gcIsEager]) {
+    // The doc is not pinned in a target and we've acknowledged the mutation. It shouldn't exist anymore.
+    FSTAssertNotContains(@"foo/bar");
+  }
 }
 
 - (void)testHandlesDocumentThenDeletedDocumentThenDocument {
@@ -513,8 +510,10 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   [self acknowledgeMutationWithVersion:3];  // patch mutation
   FSTAssertChanged(@[ FSTTestDoc("foo/bar", 1, @{@"foo" : @"bar"}, NO) ]);
-  // we've ack'd all of the mutations, nothing is keeping this pinned anymore
-  FSTAssertNotContains(@"foo/bar");
+  if ([self gcIsEager]) {
+    // we've ack'd all of the mutations, nothing is keeping this pinned anymore
+    FSTAssertNotContains(@"foo/bar");
+  }
 }
 
 - (void)testHandlesSetMutationAndPatchMutationTogether {
@@ -531,6 +530,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
 - (void)testHandlesSetMutationThenPatchMutationThenReject {
   if ([self isTestBaseClass]) return;
+  if (![self gcIsEager]) return;
 
   [self writeMutation:FSTTestSetMutation(@"foo/bar", @{@"foo" : @"old"})];
   FSTAssertContains(FSTTestDoc("foo/bar", 0, @{@"foo" : @"old"}, YES));
@@ -582,12 +582,15 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   [self acknowledgeMutationWithVersion:3];  // patch mutation
   FSTAssertRemoved(@[ @"foo/bar" ]);
-  // There are no more pending mutations, the doc has been dropped
-  FSTAssertNotContains(@"foo/bar");
+  if ([self gcIsEager]) {
+    // There are no more pending mutations, the doc has been dropped
+    FSTAssertNotContains(@"foo/bar");
+  }
 }
 
 - (void)testCollectsGarbageAfterChangeBatchWithNoTargetIDs {
   if ([self isTestBaseClass]) return;
+  if (![self gcIsEager]) return;
 
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDeletedDoc("foo/bar", 2), @[ @1 ], @[])];
   FSTAssertRemoved(@[ @"foo/bar" ]);
@@ -603,6 +606,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
 - (void)testCollectsGarbageAfterChangeBatch {
   if ([self isTestBaseClass]) return;
+  if (![self gcIsEager]) return;
 
   FSTQuery *query = FSTTestQuery("foo");
   [self allocateQuery:query];
@@ -622,6 +626,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
 - (void)testCollectsGarbageAfterAcknowledgedMutation {
   if ([self isTestBaseClass]) return;
+  if (![self gcIsEager]) return;
 
   FSTQuery *query = FSTTestQuery("foo");
   [self allocateQuery:query];
@@ -663,6 +668,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
 - (void)testCollectsGarbageAfterRejectedMutation {
   if ([self isTestBaseClass]) return;
+  if (![self gcIsEager]) return;
 
   FSTQuery *query = FSTTestQuery("foo");
   [self allocateQuery:query];
@@ -703,6 +709,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
 - (void)testPinsDocumentsInTheLocalView {
   if ([self isTestBaseClass]) return;
+  if (![self gcIsEager]) return;
 
   FSTQuery *query = FSTTestQuery("foo");
   [self allocateQuery:query];
@@ -729,7 +736,6 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTAssertContains(FSTTestDoc("foo/bar", 1, @{@"foo" : @"bar"}, NO));
   FSTAssertContains(FSTTestDoc("foo/baz", 2, @{@"foo" : @"baz"}, NO));
 
-  // Is it possible to get local changes that are not in the mutation queue?
   [self notifyLocalViewChanges:FSTTestViewChanges(query, @[], @[ @"foo/bar", @"foo/baz" ])];
   [self collectGarbage];
 
@@ -744,6 +750,8 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
 - (void)testThrowsAwayDocumentsWithUnknownTargetIDsImmediately {
   if ([self isTestBaseClass]) return;
+  // TODO(gsoltis): suspect that this needs to be handled by LRU
+  //if (![self gcIsEager]) return;
 
   FSTTargetID targetID = 321;
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 1, @{}, NO),
@@ -809,9 +817,8 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
 - (void)testPersistsResumeTokens {
   if ([self isTestBaseClass]) return;
-
   // This test only works in the absence of the FSTEagerGarbageCollector.
-  [self restartWithNoopGarbageCollector];
+  if ([self gcIsEager]) return;
 
   FSTQuery *query = FSTTestQuery("foo/bar");
   FSTQueryData *queryData = [self.localStore allocateQuery:query];
@@ -845,7 +852,6 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
 - (void)testRemoteDocumentKeysForTarget {
   if ([self isTestBaseClass]) return;
-  [self restartWithNoopGarbageCollector];
 
   FSTQuery *query = FSTTestQuery("foo");
   [self allocateQuery:query];
@@ -860,8 +866,6 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   FSTDocumentKeySet *keys = [self.localStore remoteDocumentKeysForTarget:2];
   FSTAssertEqualSets(keys, (@[ FSTTestDocKey(@"foo/bar"), FSTTestDocKey(@"foo/baz") ]));
-
-  [self restartWithNoopGarbageCollector];
 
   keys = [self.localStore remoteDocumentKeysForTarget:2];
   FSTAssertEqualSets(keys, (@[ FSTTestDocKey(@"foo/bar"), FSTTestDocKey(@"foo/baz") ]));
