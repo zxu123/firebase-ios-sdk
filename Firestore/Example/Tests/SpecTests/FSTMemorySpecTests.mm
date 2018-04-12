@@ -41,6 +41,11 @@ NS_ASSUME_NONNULL_BEGIN
     return [FSTPersistenceTestHelpers noGCMemoryPersistence];
   }
 }
+
+- (BOOL)shouldRunWithTags:(__unused NSArray<NSString *> *)tags {
+  return YES;
+}
+
 @end
 
 NS_ASSUME_NONNULL_END

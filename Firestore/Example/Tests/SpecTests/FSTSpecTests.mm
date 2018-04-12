@@ -63,6 +63,7 @@ static NSString *const kExclusiveTag = @"exclusive";
 // A tag for tests that should be excluded from execution (on iOS), useful to allow the platforms
 // to temporarily diverge.
 static NSString *const kNoIOSTag = @"no-ios";
+NSString *const kNoLRUTag = @"no-lru";
 
 @interface FSTSpecTests ()
 @property(nonatomic, strong) FSTSyncEngineTestDriver *driver;
@@ -75,6 +76,10 @@ static NSString *const kNoIOSTag = @"no-ios";
 @implementation FSTSpecTests
 
 - (id<FSTPersistence>)persistence:(BOOL)enableGC {
+  @throw FSTAbstractMethodException();  // NOLINT
+}
+
+- (BOOL)shouldRunWithTags:(NSArray<NSString *> *)tags {
   @throw FSTAbstractMethodException();  // NOLINT
 }
 
@@ -634,7 +639,6 @@ static NSString *const kNoIOSTag = @"no-ios";
 - (void)testSpecTests {
   if ([self isTestBaseClass]) return;
 
-  [FIRFirestore enableLogging:YES];
   // Enumerate the .json files containing the spec tests.
   NSMutableArray<NSString *> *specFiles = [NSMutableArray array];
   NSMutableArray<NSDictionary *> *parsedSpecs = [NSMutableArray array];
@@ -682,11 +686,18 @@ static NSString *const kNoIOSTag = @"no-ios";
         runTest = NO;
       }
       if (runTest) {
+        runTest = [self shouldRunWithTags:tags];
+      }
+      if (runTest) {
         NSLog(@"  Spec test: %@", name);
         [self runSpecTestSteps:steps config:config];
         ranAtLeastOneTest = YES;
       } else {
         NSLog(@"  [SKIPPED] Spec test: %@", name);
+        NSString *comment = testDescription[@"comment"];
+        if (comment) {
+          NSLog(@"    %@", comment);
+        }
       }
     }];
   }
