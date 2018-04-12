@@ -86,6 +86,15 @@ using leveldb::WriteOptions;
   _additionalReferences = set;
 }
 
+- (void)removeTarget:(FSTQueryData *)queryData
+      sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  FSTQueryData *updated = [queryData queryDataByReplacingSnapshotVersion:queryData.snapshotVersion
+                                                             resumeToken:queryData.resumeToken
+                                                          sequenceNumber:sequenceNumber];
+  [_db.queryCache updateQueryData:updated];
+}
+
+
 - (BOOL)mutationQueuesContainKey:(FSTDocumentKey *)docKey {
   const std::set<std::string>& users = _db.users;
   const ResourcePath& path = [docKey path];

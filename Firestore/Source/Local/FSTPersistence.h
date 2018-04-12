@@ -23,6 +23,7 @@
 @class FSTDocumentKey;
 @protocol FSTMutationQueue;
 @protocol FSTQueryCache;
+@class FSTQueryData;
 @class FSTReferenceSet;
 @protocol FSTRemoteDocumentCache;
 
@@ -110,6 +111,8 @@ extern const FSTListenSequenceNumber kFSTListenSequenceNumberInvalid;
 @protocol FSTReferenceDelegate<FSTTransactional>
 
 - (void)addReferenceSet:(FSTReferenceSet *)set;
+
+- (void)removeTarget:(FSTQueryData *)queryData sequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
 
 - (void)addReference:(FSTDocumentKey *)key
               target:(FSTTargetID)targetID

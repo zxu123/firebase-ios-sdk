@@ -109,12 +109,12 @@ NS_ASSUME_NONNULL_BEGIN
     XCTAssertEqualObjects([self.queryCache queryDataForQuery:q1], data1);
     XCTAssertEqualObjects([self.queryCache queryDataForQuery:q2], data2);
 
-    [self.queryCache removeQueryData:data1 sequenceNumber:1];
+    [self.queryCache removeQueryData:data1];
     XCTAssertNil([self.queryCache queryDataForQuery:q1]);
     XCTAssertEqualObjects([self.queryCache queryDataForQuery:q2], data2);
     XCTAssertEqual([self.queryCache count], 1);
 
-    [self.queryCache removeQueryData:data2 sequenceNumber:2];
+    [self.queryCache removeQueryData:data2];
     XCTAssertNil([self.queryCache queryDataForQuery:q1]);
     XCTAssertNil([self.queryCache queryDataForQuery:q2]);
     XCTAssertEqual([self.queryCache count], 0);
@@ -148,7 +148,7 @@ NS_ASSUME_NONNULL_BEGIN
     FSTQueryData *queryData1 = [self queryDataWithQuery:_queryRooms];
     [self.queryCache addQueryData:queryData1];
 
-    [self.queryCache removeQueryData:queryData1 sequenceNumber:1];
+    [self.queryCache removeQueryData:queryData1];
 
     FSTQueryData *result = [self.queryCache queryDataForQuery:_queryRooms];
     XCTAssertNil(result);
@@ -162,7 +162,7 @@ NS_ASSUME_NONNULL_BEGIN
     FSTQueryData *queryData = [self queryDataWithQuery:_queryRooms];
 
     // no-op, but make sure it doesn't throw.
-    XCTAssertNoThrow([self.queryCache removeQueryData:queryData sequenceNumber:1]);
+    XCTAssertNoThrow([self.queryCache removeQueryData:queryData]);
   });
 }
 
@@ -181,7 +181,7 @@ NS_ASSUME_NONNULL_BEGIN
     XCTAssertTrue([self.queryCache containsKey:key1]);
     XCTAssertTrue([self.queryCache containsKey:key2]);
 
-    [self.queryCache removeQueryData:rooms sequenceNumber:1];
+    [self.queryCache removeQueryData:rooms];
     XCTAssertFalse([self.queryCache containsKey:key1]);
     XCTAssertFalse([self.queryCache containsKey:key2]);
   });
@@ -280,7 +280,7 @@ NS_ASSUME_NONNULL_BEGIN
     XCTAssertTrue([self.queryCache containsKey:hall2]);
 
     // trigger removal of everything associated with rooms
-    [self.queryCache removeQueryData:rooms sequenceNumber:1];
+    [self.queryCache removeQueryData:rooms];
   });
 
   self.persistence.run("garbage check 3", [&]() {
@@ -342,7 +342,7 @@ NS_ASSUME_NONNULL_BEGIN
     XCTAssertEqual([self.queryCache highestListenSequenceNumber], 20);
 
     // TargetIDs never come down.
-    [self.queryCache removeQueryData:query2 sequenceNumber:1];
+    [self.queryCache removeQueryData:query2];
     XCTAssertEqual([self.queryCache highestListenSequenceNumber], 20);
 
     // A query with an empty result set still counts.
@@ -353,10 +353,10 @@ NS_ASSUME_NONNULL_BEGIN
     [self.queryCache addQueryData:query3];
     XCTAssertEqual([self.queryCache highestListenSequenceNumber], 100);
 
-    [self.queryCache removeQueryData:query1 sequenceNumber:1];
+    [self.queryCache removeQueryData:query1];
     XCTAssertEqual([self.queryCache highestListenSequenceNumber], 100);
 
-    [self.queryCache removeQueryData:query3 sequenceNumber:2];
+    [self.queryCache removeQueryData:query3];
     XCTAssertEqual([self.queryCache highestListenSequenceNumber], 100);
   });
 
@@ -394,7 +394,7 @@ NS_ASSUME_NONNULL_BEGIN
     XCTAssertEqual([self.queryCache highestTargetID], 2);
 
     // TargetIDs never come down.
-    [self.queryCache removeQueryData:query2 sequenceNumber:1];
+    [self.queryCache removeQueryData:query2];
     XCTAssertEqual([self.queryCache highestTargetID], 2);
 
     // A query with an empty result set still counts.
@@ -405,10 +405,10 @@ NS_ASSUME_NONNULL_BEGIN
     [self.queryCache addQueryData:query3];
     XCTAssertEqual([self.queryCache highestTargetID], 42);
 
-    [self.queryCache removeQueryData:query1 sequenceNumber:2];
+    [self.queryCache removeQueryData:query1];
     XCTAssertEqual([self.queryCache highestTargetID], 42);
 
-    [self.queryCache removeQueryData:query3 sequenceNumber:3];
+    [self.queryCache removeQueryData:query3];
     XCTAssertEqual([self.queryCache highestTargetID], 42);
   });
 

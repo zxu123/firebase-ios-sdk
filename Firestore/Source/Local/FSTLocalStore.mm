@@ -435,7 +435,8 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
     // call removeQueryData on GC, not queryCache.
     FSTListenSequenceNumber sequenceNumber = [self.listenSequence next];
     //if (self.garbageCollector.isEager) {
-      [self.queryCache removeQueryData:queryData sequenceNumber:sequenceNumber];
+      //[self.queryCache removeQueryData:queryData sequenceNumber:sequenceNumber];
+    [self.persistence.referenceDelegate removeTarget:queryData sequenceNumber:sequenceNumber];
     //}
     [self.targetIDs removeObjectForKey:@(queryData.targetID)];
 

@@ -247,6 +247,19 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   _additionalReferences = set;
 }
 
+- (void)removeTarget:(FSTQueryData *)queryData sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  FSTQueryData *updated = [queryData queryDataByReplacingSnapshotVersion:queryData.snapshotVersion
+                                                             resumeToken:queryData.resumeToken
+                                                          sequenceNumber:sequenceNumber];
+  [_persistence.queryCache updateQueryData:updated];
+}
+
+- (void)documentUpdated:(FSTDocumentKey *)key {
+  // TODO(gsoltis): probably need to implement this
+  // Need to bump sequence number?
+}
+
+
 - (void)startTransaction:(absl::string_view)label {
   // wat do?
 }
@@ -340,6 +353,15 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   //FSTAssert(_additionalReferences == nil, @"Overwriting additional references");
   _additionalReferences = set;
 }
+
+- (void)removeTarget:(FSTQueryData *)queryData
+      sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  [[_persistence.queryCache matchingKeysForTargetID:queryData.targetID] enumerateObjectsUsingBlock:^(FSTDocumentKey *docKey, BOOL *stop) {
+    _orphaned->insert(docKey);
+  }];
+  [_persistence.queryCache removeQueryData:queryData];
+}
+
 
 - (void)addReference:(FSTDocumentKey *)key
               target:(__unused FSTTargetID)targetID
