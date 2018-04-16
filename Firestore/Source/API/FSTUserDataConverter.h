@@ -16,16 +16,17 @@
 
 #import <Foundation/Foundation.h>
 
+#include <vector>
+
 #include "Firestore/core/src/firebase/firestore/model/database_id.h"
 #include "Firestore/core/src/firebase/firestore/model/document_key.h"
 #include "Firestore/core/src/firebase/firestore/model/field_mask.h"
+#include "Firestore/core/src/firebase/firestore/model/field_transform.h"
+#include "Firestore/core/src/firebase/firestore/model/precondition.h"
 
-@class FIRSetOptions;
 @class FSTObjectValue;
 @class FSTFieldValue;
-@class FSTFieldTransform;
 @class FSTMutation;
-@class FSTPrecondition;
 @class FSTSnapshotVersion;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -36,16 +37,19 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)init NS_UNAVAILABLE;
 
 - (instancetype)initWithData:(FSTObjectValue *)data
-             fieldTransforms:(NSArray<FSTFieldTransform *> *)fieldTransforms
+             fieldTransforms:
+                 (std::vector<firebase::firestore::model::FieldTransform>)fieldTransforms
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithData:(FSTObjectValue *)data
                    fieldMask:(firebase::firestore::model::FieldMask)fieldMask
-             fieldTransforms:(NSArray<FSTFieldTransform *> *)fieldTransforms
+             fieldTransforms:
+                 (std::vector<firebase::firestore::model::FieldTransform>)fieldTransforms
     NS_DESIGNATED_INITIALIZER;
 
+- (const std::vector<firebase::firestore::model::FieldTransform> &)fieldTransforms;
+
 @property(nonatomic, strong, readonly) FSTObjectValue *data;
-@property(nonatomic, strong, readonly) NSArray<FSTFieldTransform *> *fieldTransforms;
 @property(nonatomic, assign, readonly) BOOL isPatch;
 
 /**
@@ -53,7 +57,8 @@ NS_ASSUME_NONNULL_BEGIN
  * field transforms) using the specified document key and precondition.
  */
 - (NSArray<FSTMutation *> *)mutationsWithKey:(const firebase::firestore::model::DocumentKey &)key
-                                precondition:(FSTPrecondition *)precondition;
+                                precondition:
+                                    (const firebase::firestore::model::Precondition &)precondition;
 
 @end
 
@@ -64,20 +69,22 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)initWithData:(FSTObjectValue *)data
                    fieldMask:(firebase::firestore::model::FieldMask)fieldMask
-             fieldTransforms:(NSArray<FSTFieldTransform *> *)fieldTransforms
+             fieldTransforms:
+                 (std::vector<firebase::firestore::model::FieldTransform>)fieldTransforms
     NS_DESIGNATED_INITIALIZER;
 
 - (const firebase::firestore::model::FieldMask &)fieldMask;
+- (const std::vector<firebase::firestore::model::FieldTransform> &)fieldTransforms;
 
 @property(nonatomic, strong, readonly) FSTObjectValue *data;
-@property(nonatomic, strong, readonly) NSArray<FSTFieldTransform *> *fieldTransforms;
 
 /**
  * Converts the parsed update data into 1 or 2 mutations (depending on whether there are any
  * field transforms) using the specified document key and precondition.
  */
 - (NSArray<FSTMutation *> *)mutationsWithKey:(const firebase::firestore::model::DocumentKey &)key
-                                precondition:(FSTPrecondition *)precondition;
+                                precondition:
+                                    (const firebase::firestore::model::Precondition &)precondition;
 
 @end
 
@@ -122,7 +129,7 @@ typedef id _Nullable (^FSTPreConverterBlock)(id _Nullable);
 /** Parse document data from a non-merge setData call.*/
 - (FSTParsedSetData *)parsedSetData:(id)input;
 
-/** Parse document data from a setData call with '[FIRSetOptions merge]'. */
+/** Parse document data from a setData call with `merge:YES`. */
 - (FSTParsedSetData *)parsedMergeData:(id)input;
 
 /** Parse update data from an updateData call. */

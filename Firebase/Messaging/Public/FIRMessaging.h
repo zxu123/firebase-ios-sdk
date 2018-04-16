@@ -239,10 +239,8 @@ NS_SWIFT_NAME(MessagingRemoteMessage)
 
 @class FIRMessaging;
 /**
- * A protocol to handle events from FCM for devices running iOS 10 or above.
+ * A protocol to handle token update or data message delivery from FCM.
  *
- * To support devices running iOS 9 or below, use the local and remote notifications handlers
- * defined in UIApplicationDelegate protocol.
  */
 NS_SWIFT_NAME(MessagingDelegate)
 @protocol FIRMessagingDelegate <NSObject>
@@ -259,15 +257,6 @@ NS_SWIFT_NAME(MessagingDelegate)
     didReceiveRegistrationToken:(NSString *)fcmToken
     NS_SWIFT_NAME(messaging(_:didReceiveRegistrationToken:));
 
-/// This method will be called whenever FCM receives a new, default FCM token for your
-/// Firebase project's Sender ID. This method is deprecated. Please use
-/// `messaging:didReceiveRegistrationToken:`.
-- (void)messaging:(FIRMessaging *)messaging
-    didRefreshRegistrationToken:(NSString *)fcmToken
-    NS_SWIFT_NAME(messaging(_:didRefreshRegistrationToken:))
-    __deprecated_msg("Please use messaging:didReceiveRegistrationToken:, which is called for both \
-                     current and refreshed tokens.");
-
 /// This method is called on iOS 10 devices to handle data messages received via FCM through its
 /// direct channel (not via APNS). For iOS 9 and below, the FCM data message is delivered via the
 /// UIApplicationDelegate's -application:didReceiveRemoteNotification: method.
@@ -275,11 +264,6 @@ NS_SWIFT_NAME(MessagingDelegate)
     didReceiveMessage:(FIRMessagingRemoteMessage *)remoteMessage
     NS_SWIFT_NAME(messaging(_:didReceive:))
     __IOS_AVAILABLE(10.0);
-
-/// The callback to handle data message received via FCM for devices running iOS 10 or above.
-- (void)applicationReceivedRemoteMessage:(FIRMessagingRemoteMessage *)remoteMessage
-    NS_SWIFT_NAME(application(received:))
-    __deprecated_msg("Use FIRMessagingDelegate’s -messaging:didReceiveMessage:");
 
 @end
 
@@ -302,23 +286,12 @@ NS_SWIFT_NAME(Messaging)
 @property(nonatomic, weak, nullable) id<FIRMessagingDelegate> delegate;
 
 /**
- * Delegate to handle remote data messages received via FCM for devices running iOS 10 or above.
- */
-@property(nonatomic, weak, nullable) id<FIRMessagingDelegate> remoteMessageDelegate
-    __deprecated_msg("Use 'delegate' property");
-
-/**
  *  When set to `YES`, Firebase Messaging will automatically establish a socket-based, direct
  *  channel to the FCM server. Enable this only if you are sending upstream messages or
  *  receiving non-APNS, data-only messages in foregrounded apps.
  *  Default is `NO`.
  */
-@property(nonatomic) BOOL shouldEstablishDirectChannel;
-
-/**
- *  Returns `YES` if the direct channel to the FCM server is active, and `NO` otherwise.
- */
-@property(nonatomic, readonly) BOOL isDirectChannelEstablished;
+@property(nonatomic, assign, getter=isDirectChannelEstablished) BOOL shouldEstablishDirectChannel;
 
 /**
  *  FIRMessaging
@@ -478,7 +451,7 @@ NS_SWIFT_NAME(Messaging)
  *                     In case of success, nil error is returned. Otherwise, an
  *                     appropriate error object is returned.
  */
-- (void)subscribeToTopic:(NSString *)topic
+- (void)subscribeToTopic:(nonnull NSString *)topic
               completion:(nullable FIRMessagingTopicOperationCompletion)completion;
 
 /**
@@ -496,7 +469,7 @@ NS_SWIFT_NAME(Messaging)
  *                     In case of success, nil error is returned. Otherwise, an
  *                     appropriate error object is returned.
  */
-- (void)unsubscribeFromTopic:(NSString *)topic
+- (void)unsubscribeFromTopic:(nonnull NSString *)topic
                   completion:(nullable FIRMessagingTopicOperationCompletion)completion;
 
 #pragma mark - Upstream

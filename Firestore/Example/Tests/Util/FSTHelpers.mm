@@ -46,7 +46,9 @@
 #include "Firestore/core/src/firebase/firestore/model/database_id.h"
 #include "Firestore/core/src/firebase/firestore/model/document_key.h"
 #include "Firestore/core/src/firebase/firestore/model/field_mask.h"
+#include "Firestore/core/src/firebase/firestore/model/field_transform.h"
 #include "Firestore/core/src/firebase/firestore/model/field_value.h"
+#include "Firestore/core/src/firebase/firestore/model/precondition.h"
 #include "Firestore/core/src/firebase/firestore/model/resource_path.h"
 #include "Firestore/core/src/firebase/firestore/model/transform_operations.h"
 #include "Firestore/core/src/firebase/firestore/util/string_apple.h"
@@ -59,7 +61,9 @@ using firebase::firestore::model::DatabaseId;
 using firebase::firestore::model::DocumentKey;
 using firebase::firestore::model::FieldMask;
 using firebase::firestore::model::FieldPath;
+using firebase::firestore::model::FieldTransform;
 using firebase::firestore::model::FieldValue;
+using firebase::firestore::model::Precondition;
 using firebase::firestore::model::ResourcePath;
 using firebase::firestore::model::ServerTimestampTransform;
 using firebase::firestore::model::TransformOperation;
@@ -118,7 +122,7 @@ NSDateComponents *FSTTestDateComponents(
   return comps;
 }
 
-FSTFieldValue *FSTTestFieldValue(id _Nullable value) {
+FSTUserDataConverter *FSTTestUserDataConverter() {
   // This owns the DatabaseIds since we do not have FirestoreClient instance to own them.
   static DatabaseId database_id{"project", DatabaseId::kDefault};
   FSTUserDataConverter *converter =
@@ -126,6 +130,11 @@ FSTFieldValue *FSTTestFieldValue(id _Nullable value) {
                                           preConverter:^id _Nullable(id _Nullable input) {
                                             return input;
                                           }];
+  return converter;
+}
+
+FSTFieldValue *FSTTestFieldValue(id _Nullable value) {
+  FSTUserDataConverter *converter = FSTTestUserDataConverter();
   // HACK: We use parsedQueryValue: since it accepts scalars as well as arrays / objects, and
   // our tests currently use FSTTestFieldValue() pretty generically so we don't know the intent.
   return [converter parsedQueryValue:value];
@@ -248,7 +257,7 @@ FSTDocumentSet *FSTTestDocSet(NSComparator comp, NSArray<FSTDocument *> *docs) {
 FSTSetMutation *FSTTestSetMutation(NSString *path, NSDictionary<NSString *, id> *values) {
   return [[FSTSetMutation alloc] initWithKey:FSTTestDocKey(path)
                                        value:FSTTestObjectValue(values)
-                                precondition:[FSTPrecondition none]];
+                                precondition:Precondition::None()];
 }
 
 FSTPatchMutation *FSTTestPatchMutation(const absl::string_view path,
@@ -272,27 +281,22 @@ FSTPatchMutation *FSTTestPatchMutation(const absl::string_view path,
   return [[FSTPatchMutation alloc] initWithKey:key
                                      fieldMask:mask
                                          value:objectValue
-                                  precondition:[FSTPrecondition preconditionWithExists:YES]];
+                                  precondition:Precondition::Exists(true)];
 }
 
-// For now this only creates TransformMutations with server timestamps.
-FSTTransformMutation *FSTTestTransformMutation(NSString *path,
-                                               NSArray<NSString *> *serverTimestampFields) {
+FSTTransformMutation *FSTTestTransformMutation(NSString *path, NSDictionary<NSString *, id> *data) {
   FSTDocumentKey *key = [FSTDocumentKey keyWithPath:testutil::Resource(util::MakeStringView(path))];
-  NSMutableArray<FSTFieldTransform *> *fieldTransforms = [NSMutableArray array];
-  for (NSString *field in serverTimestampFields) {
-    const FieldPath fieldPath = testutil::Field(util::MakeStringView(field));
-    auto transformOp = absl::make_unique<ServerTimestampTransform>(ServerTimestampTransform::Get());
-    FSTFieldTransform *transform =
-        [[FSTFieldTransform alloc] initWithPath:fieldPath transform:std::move(transformOp)];
-    [fieldTransforms addObject:transform];
-  }
-  return [[FSTTransformMutation alloc] initWithKey:key fieldTransforms:fieldTransforms];
+  FSTUserDataConverter *converter = FSTTestUserDataConverter();
+  FSTParsedUpdateData *result = [converter parsedUpdateData:data];
+  FSTCAssert(result.data.value.count == 0,
+             @"FSTTestTransformMutation() only expects transforms; no other data");
+  return [[FSTTransformMutation alloc] initWithKey:key
+                                   fieldTransforms:std::move(result.fieldTransforms)];
 }
 
 FSTDeleteMutation *FSTTestDeleteMutation(NSString *path) {
-  return [[FSTDeleteMutation alloc] initWithKey:FSTTestDocKey(path)
-                                   precondition:[FSTPrecondition none]];
+  return
+      [[FSTDeleteMutation alloc] initWithKey:FSTTestDocKey(path) precondition:Precondition::None()];
 }
 
 FSTMaybeDocumentDictionary *FSTTestDocUpdates(NSArray<FSTMaybeDocument *> *docs) {

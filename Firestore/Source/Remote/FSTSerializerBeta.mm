@@ -49,6 +49,8 @@
 #include "Firestore/core/src/firebase/firestore/model/document_key.h"
 #include "Firestore/core/src/firebase/firestore/model/field_mask.h"
 #include "Firestore/core/src/firebase/firestore/model/field_path.h"
+#include "Firestore/core/src/firebase/firestore/model/field_transform.h"
+#include "Firestore/core/src/firebase/firestore/model/precondition.h"
 #include "Firestore/core/src/firebase/firestore/model/resource_path.h"
 #include "Firestore/core/src/firebase/firestore/model/transform_operations.h"
 #include "Firestore/core/src/firebase/firestore/util/string_apple.h"
@@ -59,8 +61,11 @@ using firebase::firestore::model::DatabaseId;
 using firebase::firestore::model::DocumentKey;
 using firebase::firestore::model::FieldMask;
 using firebase::firestore::model::FieldPath;
+using firebase::firestore::model::FieldTransform;
+using firebase::firestore::model::Precondition;
 using firebase::firestore::model::ResourcePath;
 using firebase::firestore::model::ServerTimestampTransform;
+using firebase::firestore::model::SnapshotVersion;
 using firebase::firestore::model::TransformOperation;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -473,7 +478,7 @@ NS_ASSUME_NONNULL_BEGIN
     FSTFail(@"Unknown mutation type %@", NSStringFromClass(mutationClass));
   }
 
-  if (!mutation.precondition.isNone) {
+  if (!mutation.precondition.IsNone()) {
     proto.currentDocument = [self encodedPrecondition:mutation.precondition];
   }
 
@@ -481,9 +486,9 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (FSTMutation *)decodedMutation:(GCFSWrite *)mutation {
-  FSTPrecondition *precondition = [mutation hasCurrentDocument]
-                                      ? [self decodedPrecondition:mutation.currentDocument]
-                                      : [FSTPrecondition none];
+  Precondition precondition = [mutation hasCurrentDocument]
+                                  ? [self decodedPrecondition:mutation.currentDocument]
+                                  : Precondition::None();
 
   switch (mutation.operationOneOfCase) {
     case GCFSWrite_Operation_OneOfCase_Update:
@@ -503,8 +508,7 @@ NS_ASSUME_NONNULL_BEGIN
                                        precondition:precondition];
 
     case GCFSWrite_Operation_OneOfCase_Transform: {
-      FSTPreconditionExists exists = precondition.exists;
-      FSTAssert(exists == FSTPreconditionExistsYes,
+      FSTAssert(precondition == Precondition::Exists(true),
                 @"Transforms must have precondition \"exists == true\"");
 
       return [[FSTTransformMutation alloc]
@@ -518,30 +522,29 @@ NS_ASSUME_NONNULL_BEGIN
   }
 }
 
-- (GCFSPrecondition *)encodedPrecondition:(FSTPrecondition *)precondition {
-  FSTAssert(!precondition.isNone, @"Can't serialize an empty precondition");
+- (GCFSPrecondition *)encodedPrecondition:(const Precondition &)precondition {
+  FSTAssert(!precondition.IsNone(), @"Can't serialize an empty precondition");
   GCFSPrecondition *message = [GCFSPrecondition message];
-  if (precondition.updateTime) {
-    message.updateTime = [self encodedVersion:precondition.updateTime];
-  } else if (precondition.exists != FSTPreconditionExistsNotSet) {
-    message.exists = precondition.exists == FSTPreconditionExistsYes;
+  if (precondition.type() == Precondition::Type::UpdateTime) {
+    message.updateTime = [self encodedVersion:precondition.update_time()];
+  } else if (precondition.type() == Precondition::Type::Exists) {
+    message.exists = precondition == Precondition::Exists(true);
   } else {
-    FSTFail(@"Unknown precondition: %@", precondition);
+    FSTFail(@"Unknown precondition: %@", precondition.description());
   }
   return message;
 }
 
-- (FSTPrecondition *)decodedPrecondition:(GCFSPrecondition *)precondition {
+- (Precondition)decodedPrecondition:(GCFSPrecondition *)precondition {
   switch (precondition.conditionTypeOneOfCase) {
     case GCFSPrecondition_ConditionType_OneOfCase_GPBUnsetOneOfCase:
-      return [FSTPrecondition none];
+      return Precondition::None();
 
     case GCFSPrecondition_ConditionType_OneOfCase_Exists:
-      return [FSTPrecondition preconditionWithExists:precondition.exists];
+      return Precondition::Exists(precondition.exists);
 
     case GCFSPrecondition_ConditionType_OneOfCase_UpdateTime:
-      return [FSTPrecondition
-          preconditionWithUpdateTime:[self decodedVersion:precondition.updateTime]];
+      return Precondition::UpdateTime([self decodedVersion:precondition.updateTime]);
 
     default:
       FSTFail(@"Unrecognized Precondition one-of case %@", precondition);
@@ -557,7 +560,7 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (FieldMask)decodedFieldMask:(GCFSDocumentMask *)fieldMask {
-  std::vector<FieldPath> fields{};
+  std::vector<FieldPath> fields;
   fields.reserve(fieldMask.fieldPathsArray_Count);
   for (NSString *path in fieldMask.fieldPathsArray) {
     fields.push_back(FieldPath::FromServerFormat(util::MakeStringView(path)));
@@ -566,31 +569,30 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (NSMutableArray<GCFSDocumentTransform_FieldTransform *> *)encodedFieldTransforms:
-    (NSArray<FSTFieldTransform *> *)fieldTransforms {
+    (const std::vector<FieldTransform> &)fieldTransforms {
   NSMutableArray *protos = [NSMutableArray array];
-  for (FSTFieldTransform *fieldTransform in fieldTransforms) {
-    FSTAssert(fieldTransform.transform->type() == TransformOperation::Type::ServerTimestamp,
-              @"Unknown transform: %d type", fieldTransform.transform->type());
+  for (const FieldTransform &fieldTransform : fieldTransforms) {
+    FSTAssert(fieldTransform.transformation().type() == TransformOperation::Type::ServerTimestamp,
+              @"Unknown transform: %d type", fieldTransform.transformation().type());
     GCFSDocumentTransform_FieldTransform *proto = [GCFSDocumentTransform_FieldTransform message];
-    proto.fieldPath = util::WrapNSString(fieldTransform.path.CanonicalString());
+    proto.fieldPath = util::WrapNSString(fieldTransform.path().CanonicalString());
     proto.setToServerValue = GCFSDocumentTransform_FieldTransform_ServerValue_RequestTime;
     [protos addObject:proto];
   }
   return protos;
 }
 
-- (NSArray<FSTFieldTransform *> *)decodedFieldTransforms:
+- (std::vector<FieldTransform>)decodedFieldTransforms:
     (NSArray<GCFSDocumentTransform_FieldTransform *> *)protos {
-  NSMutableArray<FSTFieldTransform *> *fieldTransforms = [NSMutableArray array];
+  std::vector<FieldTransform> fieldTransforms;
+  fieldTransforms.reserve(protos.count);
   for (GCFSDocumentTransform_FieldTransform *proto in protos) {
     FSTAssert(
         proto.setToServerValue == GCFSDocumentTransform_FieldTransform_ServerValue_RequestTime,
         @"Unknown transform setToServerValue: %d", proto.setToServerValue);
-    [fieldTransforms addObject:[[FSTFieldTransform alloc]
-                                   initWithPath:FieldPath::FromServerFormat(
-                                                    util::MakeStringView(proto.fieldPath))
-                                      transform:absl::make_unique<ServerTimestampTransform>(
-                                                    ServerTimestampTransform::Get())]];
+    fieldTransforms.emplace_back(
+        FieldPath::FromServerFormat(util::MakeStringView(proto.fieldPath)),
+        absl::make_unique<ServerTimestampTransform>(ServerTimestampTransform::Get()));
   }
   return fieldTransforms;
 }
