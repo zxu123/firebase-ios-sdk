@@ -387,7 +387,7 @@ static const int32_t kTransformSizeEstimate = sizeof(int64_t) + sizeof(int32_t);
         result +=
             [FSTMemoryPersistence objectValueSizeInMemory:((FSTPatchMutation *)mutation).value];
       } else if (mutationClass == [FSTTransformMutation class]) {
-        result += kTransformSizeEstimate * ((FSTTransformMutation *)mutation).fieldTransforms.count;
+        result += kTransformSizeEstimate * ((FSTTransformMutation *)mutation).fieldTransforms.size();
       } else {
         // deletion, no extra size
       }

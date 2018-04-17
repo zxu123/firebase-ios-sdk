@@ -688,10 +688,6 @@ NS_ASSUME_NONNULL_BEGIN
   if (![self gcIsEager]) return;
 
   FSTQuery *query = FSTTestQuery("foo");
-  [self allocateQuery:query];
-  FSTAssertTargetID(2);
-
-  FSTQuery *query = FSTTestQuery("foo");
   FSTTargetID targetID = [self allocateQuery:query];
 
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 0, @{@"foo" : @"old"}, NO),
@@ -768,8 +764,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)testThrowsAwayDocumentsWithUnknownTargetIDsImmediately {
   if ([self isTestBaseClass]) return;
-  // TODO(gsoltis): suspect that this needs to be handled by LRU
-  //if (![self gcIsEager]) return;
+  if (![self gcIsEager]) return;
 
   FSTTargetID targetID = 321;
   [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 1, @{}, NO),

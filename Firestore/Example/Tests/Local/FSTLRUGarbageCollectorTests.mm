@@ -19,7 +19,7 @@
 #import <XCTest/XCTest.h>
 #import <absl/strings/str_cat.h>
 
-#import "Firestore/Source/Public/FIRTimestamp.h"
+//#import "Firestore/Source/Public/FIRTimestamp.h"
 
 #import "Firestore/Example/Tests/Util/FSTHelpers.h"
 #import "Firestore/Source/Local/FSTLRUGarbageCollector.h"
@@ -31,8 +31,10 @@
 #import "Firestore/Source/Model/FSTMutation.h"
 #import "Firestore/Source/Util/FSTClasses.h"
 #include "Firestore/core/src/firebase/firestore/auth/user.h"
+#include "Firestore/core/src/firebase/firestore/model/precondition.h"
 
 using firebase::firestore::auth::User;
+using firebase::firestore::model::Precondition;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -345,7 +347,7 @@ NS_ASSUME_NONNULL_BEGIN
           initWithDictionary:@{@"foo" : [FSTStringValue stringValue:@"bar"]}];
       [mutations addObject:[[FSTSetMutation alloc] initWithKey:doc2.key
                                                          value:newValue
-                                                  precondition:[FSTPrecondition none]]];
+                                                  precondition:Precondition::None()]];
     }
 
     // Add one document to the second target
@@ -366,7 +368,7 @@ NS_ASSUME_NONNULL_BEGIN
       FSTDocument *doc1 = [self nextTestDocument];
       [mutations addObject:[[FSTSetMutation alloc] initWithKey:doc1.key
                                                          value:doc1.data
-                                                  precondition:[FSTPrecondition none]]];
+                                                  precondition:Precondition::None()]];
       [documentCache addEntry:doc1];
       [toBeRetained addObject:doc1.key];
     }
