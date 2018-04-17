@@ -19,8 +19,6 @@
 #import <XCTest/XCTest.h>
 #import <absl/strings/str_cat.h>
 
-//#import "Firestore/Source/Public/FIRTimestamp.h"
-
 #import "Firestore/Example/Tests/Util/FSTHelpers.h"
 #import "Firestore/Source/Local/FSTLRUGarbageCollector.h"
 #import "Firestore/Source/Local/FSTMutationQueue.h"
