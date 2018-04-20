@@ -59,6 +59,8 @@ class ScheduledOperation {
   }
 
   void Cancel();
+  Callable callable() const { return callable_; }
+
   void RescheduleAsap();
 
   bool operator<(const ScheduledOperation& rhs) const {
@@ -209,6 +211,22 @@ class Executor {
                }) != schedule_.end();
   }
 
+  bool IsScheduleEmpty() const {
+    return schedule_.empty();
+  }
+
+  Callable PopFromSchedule() {
+    std::sort(
+        schedule_.begin(), schedule_.end(),
+        [](const ScheduledOperation<Callable>* lhs,
+           const ScheduledOperation<Callable>* rhs) { return *lhs < *rhs; });
+    const auto operation = schedule_.begin();
+    Callable result = (*operation)->callable();
+    (*operation)->MarkDone();
+    schedule_.erase(operation);
+    return result;
+  }
+
  private:
   dispatch_queue_t dispatch_queue() const {
     return dispatch_queue_;
@@ -241,7 +259,7 @@ void ScheduledOperation<Callable>::Cancel() {
 template <typename Callable>
 void ScheduledOperation<Callable>::RescheduleAsap() {
   FIREBASE_ASSERT_MESSAGE(!done_, "TODO");
-  executor_->Enqueue([this] { Execute(); });
+  executor_->Execute([this] { Execute(); });
 }
 
 template <typename Callable>

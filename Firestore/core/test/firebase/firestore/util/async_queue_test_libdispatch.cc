@@ -189,7 +189,6 @@ TEST_F(SerialQueueTest, DelayedOperationIsValidAfterTheOperationHasRun) {
   queue.EnqueueBlocking([&] { EXPECT_NO_THROW(delayed_operation.Cancel()); });
 }
 
-/*
 TEST_F(SerialQueueTest, CanManuallyDrainAllDelayedCallbacksForTesting) {
   std::string steps;
 
@@ -204,7 +203,7 @@ TEST_F(SerialQueueTest, CanManuallyDrainAllDelayedCallbacksForTesting) {
   });
 
   EXPECT_TRUE(WaitForTestToFinish());
-  // queue.RunDelayedOperationsUntil(TimerId::All);
+  queue.RunScheduledOperationsUntil(TimerId::All);
   EXPECT_EQ(steps, "1234");
 }
 
@@ -224,10 +223,9 @@ TEST_F(SerialQueueTest, CanManuallyDrainSpecificDelayedCallbacksForTesting) {
   });
 
   EXPECT_TRUE(WaitForTestToFinish());
-  // queue.RunDelayedOperationsUntil(kTimerId3);
+  queue.RunScheduledOperationsUntil(kTimerId3);
   EXPECT_EQ(steps, "1234");
 }
-*/
 
 }  // namespace util
 }  // namespace firestore

@@ -26,7 +26,7 @@ namespace util {
 namespace internal {
 
 /*
-void AsyncQueueImpl::RunDelayedOperationsUntil(const TimerId last_timer_id) {
+void RunScheduledOperationsUntil(const TimerId last_timer_id) {
   const dispatch_semaphore_t done_semaphore = dispatch_semaphore_create(0);
 
   Enqueue([this, last_timer_id, done_semaphore] {
