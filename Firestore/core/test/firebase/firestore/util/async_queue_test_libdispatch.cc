@@ -88,10 +88,8 @@ TEST_F(SerialQueueTest, EnqueueAllowingNestingWorksFromWithinEnqueue) {
 }
 
 TEST_F(SerialQueueTest, SameQueueIsAllowedForUnownedActions) {
-  dispatch_async_f(underlying_queue, this, [](void* const raw_self) {
-    auto self = static_cast<SerialQueueTest*>(raw_self);
-    self->queue.Enqueue([self] { self->signal_finished(); });
-  });
+  internal::DispatchAsync(underlying_queue,
+                [this] { queue.Enqueue([this] { signal_finished(); }); });
 
   EXPECT_TRUE(WaitForTestToFinish());
 }
@@ -120,10 +118,8 @@ TEST_F(SerialQueueTest, VerifyCalledFromOperationRequiresBeingCalledAsync) {
 }
 
 TEST_F(SerialQueueTest, VerifyCalledFromOperationRequiresOperationInProgress) {
-  dispatch_sync_f(underlying_queue, &queue, [](void* const raw_queue) {
-    EXPECT_ANY_THROW(
-        static_cast<SerialQueue*>(raw_queue)->VerifyCalledFromOperation());
-  });
+  internal::DispatchSync(underlying_queue,
+               [this] { EXPECT_ANY_THROW(queue.VerifyCalledFromOperation()); });
 }
 
 TEST_F(SerialQueueTest, VerifyCalledFromOperationWorksWithOperationInProgress) {
