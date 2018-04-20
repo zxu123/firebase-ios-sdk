@@ -36,8 +36,6 @@ absl::string_view StringViewFromLabel(const char* const label) {
   return label ? absl::string_view{label} : absl::string_view{""};
 }
 
-// ScheduledOperation
-
 namespace internal {
 
 template <typename Callable>
@@ -51,8 +49,8 @@ template <typename Callable>
 class ScheduledOperation {
  public:
   ScheduledOperation(Executor<Callable>* const executor,
-                       const Milliseconds delay,
-                       Callable&& callable)
+                     const Milliseconds delay,
+                     Callable&& callable)
       : executor_{executor},
         target_time_{std::chrono::time_point_cast<Milliseconds>(
                          std::chrono::system_clock::now()) +
@@ -74,7 +72,7 @@ class ScheduledOperation {
 
  private:
   void Execute();
-  void Dequeue();
+  void RemoveFromSchedule();
 
   using TimePoint =
       std::chrono::time_point<std::chrono::system_clock, Milliseconds>;
@@ -138,8 +136,8 @@ class Executor {
     // Turn any operations that might still be in the queue into no-ops, lest
     // they try to access `Executor` after it gets destroyed.
     ExecuteBlocking([this] {
-      for (auto operation : operations_) {
-        operation->MarkDone();
+      while (!schedule_.empty()) {
+        RemoveFromSchedule(*schedule_.back());
       }
     });
   }
@@ -159,7 +157,7 @@ class Executor {
   }
 
   ScheduledOperation<Callable>* ScheduleExecution(Milliseconds delay,
-                                               Callable operation) {
+                                                  Callable callable) {
     namespace chr = std::chrono;
     const dispatch_time_t delay_ns = dispatch_time(
         DISPATCH_TIME_NOW, chr::duration_cast<chr::nanoseconds>(delay).count());
@@ -174,25 +172,27 @@ class Executor {
     // hasn't been run or canceled yet. When libdispatch invokes the operation,
     // it will remove the operation from Executor, and since it happens inside
     // `dispatch` invocation, it happens-before any access from Executor to
-    // `operations_`.
+    // `schedule_`.
 
     auto const delayed_operation =
-        new ScheduledOperation<Callable>{this, delay, std::move(operation)};
+        new ScheduledOperation<Callable>{this, delay, std::move(callable)};
     dispatch_after_f(delay_ns, dispatch_queue(), delayed_operation,
                      ScheduledOperation<Callable>::InvokedByLibdispatch);
-    operations_.push_back(delayed_operation);
+    schedule_.push_back(delayed_operation);
     return delayed_operation;
   }
 
   void RemoveFromSchedule(const ScheduledOperation<Callable>& to_remove) {
-    const auto found = std::find_if(operations_.begin(), operations_.end(),
-                                    [&to_remove](const ScheduledOperation<Callable>* op) {
-                                      return op == &to_remove;
-                                    });
+    const auto found =
+        std::find_if(schedule_.begin(), schedule_.end(),
+                     [&to_remove](const ScheduledOperation<Callable>* op) {
+                       return op == &to_remove;
+                     });
     // It's possible for the operation to be missing if libdispatch gets to run
     // it after it was force-run, for example.
-    if (found != operations_.end()) {
-      operations_.erase(found);
+    if (found != schedule_.end()) {
+      (*found)->MarkDone();
+      schedule_.erase(found);
     }
   }
 
@@ -215,13 +215,13 @@ class Executor {
   }
 
   std::atomic<dispatch_queue_t> dispatch_queue_;
-  std::vector<ScheduledOperation<Callable>*> operations_;
+  std::vector<ScheduledOperation<Callable>*> schedule_;
 };
 
 template <typename Callable>
 void ScheduledOperation<Callable>::Cancel() {
   if (!done_) {
-    Dequeue();
+    RemoveFromSchedule();
   }
 }
 
@@ -235,8 +235,6 @@ template <typename Callable>
 void ScheduledOperation<Callable>::InvokedByLibdispatch(void* const raw_self) {
   auto const self = static_cast<ScheduledOperation*>(raw_self);
   self->Execute();
-  // TODO: EnterCheckedOperation
-  // StartExecution is a blocking operation.
   delete self;
 }
 
@@ -246,16 +244,15 @@ void ScheduledOperation<Callable>::Execute() {
     return;
   }
 
-  Dequeue();
-  MarkDone();
+  RemoveFromSchedule();
 
-  FIREBASE_ASSERT_MESSAGE(
-      callable_, "ScheduledOperation contains an invalid callable");
+  FIREBASE_ASSERT_MESSAGE(callable_,
+                          "ScheduledOperation contains an invalid callable");
   callable_();
 }
 
 template <typename Callable>
-void ScheduledOperation<Callable>::Dequeue() {
+void ScheduledOperation<Callable>::RemoveFromSchedule() {
   executor_->RemoveFromSchedule(*this);
 }
 
