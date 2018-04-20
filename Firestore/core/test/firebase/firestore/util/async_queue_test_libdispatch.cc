@@ -166,15 +166,14 @@ TEST_F(SerialQueueTest, CanCancelDelayedCallbacks) {
       signal_finished();
     });
 
-    // EXPECT_TRUE(queue.ContainsDelayedOperation(kTimerId1));
+    EXPECT_TRUE(queue.IsScheduled(kTimerId1));
     delayed_operation.Cancel();
-    // EXPECT_FALSE(queue.ContainsDelayedOperation(kTimerId1));
+    EXPECT_FALSE(queue.IsScheduled(kTimerId1));
   });
 
   EXPECT_TRUE(WaitForTestToFinish());
   EXPECT_EQ(steps, "13");
-  // queue.EnqueueBlocking(
-  //     [&] { EXPECT_FALSE(queue.ContainsDelayedOperation(kTimerId1)); });
+  queue.EnqueueBlocking([&] { EXPECT_FALSE(queue.IsScheduled(kTimerId1)); });
 }
 
 TEST_F(SerialQueueTest, DelayedOperationIsValidAfterTheOperationHasRun) {
@@ -182,12 +181,11 @@ TEST_F(SerialQueueTest, DelayedOperationIsValidAfterTheOperationHasRun) {
   queue.Enqueue([&] {
     delayed_operation = queue.EnqueueAfterDelay(
         SerialQueue::Milliseconds(10), kTimerId1, [&] { signal_finished(); });
-    // EXPECT_TRUE(queue.ContainsDelayedOperation(kTimerId1));
+    EXPECT_TRUE(queue.IsScheduled(kTimerId1));
   });
 
   EXPECT_TRUE(WaitForTestToFinish());
-  // queue.EnqueueBlocking(
-  // [&] { EXPECT_FALSE(queue.ContainsDelayedOperation(kTimerId1)); });
+  queue.EnqueueBlocking([&] { EXPECT_FALSE(queue.IsScheduled(kTimerId1)); });
   queue.EnqueueBlocking([&] { EXPECT_NO_THROW(delayed_operation.Cancel()); });
 }
 

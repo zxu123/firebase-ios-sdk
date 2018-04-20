@@ -26,14 +26,6 @@ namespace util {
 namespace internal {
 
 /*
-bool AsyncQueueImpl::ContainsDelayedOperation(const TimerId timer_id) const {
-  VerifyOnTargetQueue();
-  return std::find_if(operations_.begin(), operations_.end(),
-                      [timer_id](const DelayedOperationPtr& op) {
-                        return op->timer_id() == timer_id;
-                      }) != operations_.end();
-}
-
 void AsyncQueueImpl::RunDelayedOperationsUntil(const TimerId last_timer_id) {
   const dispatch_semaphore_t done_semaphore = dispatch_semaphore_create(0);
 
@@ -73,12 +65,6 @@ void AsyncQueueImpl::RunDelayedOperationsUntil(const TimerId last_timer_id) {
   dispatch_semaphore_wait(done_semaphore, DISPATCH_TIME_FOREVER);
 }
 */
-
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
 
 }  // namespace internal
 

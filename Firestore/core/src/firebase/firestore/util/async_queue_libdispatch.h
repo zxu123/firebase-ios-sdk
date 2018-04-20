@@ -60,8 +60,12 @@ class ScheduledOperation {
 
   void Cancel();
   void RescheduleAsap();
+
   bool operator<(const ScheduledOperation& rhs) const {
     return target_time_ < rhs.target_time_;
+  }
+  bool operator==(const Callable& rhs) const {
+    return callable_ == rhs;
   }
 
   void MarkDone() {
@@ -194,6 +198,15 @@ class Executor {
       (*found)->MarkDone();
       schedule_.erase(found);
     }
+  }
+
+  bool IsScheduled(const Callable& callable) const {
+    return std::find_if(
+               schedule_.begin(), schedule_.end(),
+               [&callable](
+                   const ScheduledOperation<Callable>* const operation) {
+                 return *operation == callable;
+               }) != schedule_.end();
   }
 
  private:
