@@ -35,12 +35,15 @@ const TimerId kTimerId3 = TimerId::WriteStreamConnectionBackoff;
 
 const auto kTimeout = std::chrono::seconds(5);
 
+using internal::Executor;
+using internal::TaggedOperation;
+
 class SerialQueueTest : public ::testing::Test {
  public:
   SerialQueueTest()
       : underlying_queue{dispatch_queue_create("SerialQueueTests",
                                                DISPATCH_QUEUE_SERIAL)},
-        // queue{underlying_queue},
+        queue{absl::make_unique<Executor<TaggedOperation>>()},
         signal_finished{[] {}} {
   }
 
