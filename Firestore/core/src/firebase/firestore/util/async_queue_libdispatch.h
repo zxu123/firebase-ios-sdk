@@ -24,27 +24,24 @@
 #include <memory>
 #include <vector>
 
-#include "absl/strings/string_view.h"
 #include "Firestore/core/src/firebase/firestore/util/firebase_assert.h"
+#include "absl/strings/string_view.h"
 
 namespace firebase {
 namespace firestore {
 namespace util {
-
-namespace {
 
 absl::string_view StringViewFromLabel(const char* const label) {
   // Make sure string_view's data is not null, because it's used for logging.
   return label ? absl::string_view{label} : absl::string_view{""};
 }
 
-}  // namespace
-
 // DelayedOperationImpl
 
 namespace internal {
 
-template <typename Tag> class Executor;
+template <typename Tag>
+class Executor;
 using Operation = std::function<void()>;
 using Milliseconds = std::chrono::milliseconds;
 
@@ -53,13 +50,13 @@ using Milliseconds = std::chrono::milliseconds;
 template <typename Tag>
 class DelayedOperationImpl {
  public:
-DelayedOperationImpl(Executor<Tag>* const executor,
+  DelayedOperationImpl(Executor<Tag>* const executor,
                        const Milliseconds delay,
                        Operation&& operation)
-      : executor_{executor}, target_time_{
-            std::chrono::time_point_cast<Milliseconds>(
-                std::chrono::system_clock::now()) +
-            delay},
+      : executor_{executor},
+        target_time_{std::chrono::time_point_cast<Milliseconds>(
+                         std::chrono::system_clock::now()) +
+                     delay},
         operation_{std::move(operation)} {
   }
 
@@ -73,13 +70,14 @@ DelayedOperationImpl(Executor<Tag>* const executor,
     done_ = true;
   }
 
- private:
   static void InvokedByLibdispatch(void* const raw_self);
+
+ private:
   void Execute();
   void Dequeue();
 
-  using TimePoint = std::chrono::time_point<std::chrono::system_clock,
-                                            Milliseconds>;
+  using TimePoint =
+      std::chrono::time_point<std::chrono::system_clock, Milliseconds>;
 
   Executor<Tag>* const executor_;
   const TimePoint target_time_;  // Used for sorting
@@ -125,7 +123,6 @@ void DispatchSync(const dispatch_queue_t queue, Work&& work) {
   });
 }
 
-
 template <typename Tag>
 class Executor {
  public:
@@ -142,7 +139,7 @@ class Executor {
     // they try to access `Executor` after it gets destroyed.
     ExecuteBlocking([this] {
       for (auto operation : operations_) {
-        operation->MarkDone();
+        operation.op->MarkDone();
       }
     });
   }
@@ -162,8 +159,8 @@ class Executor {
   }
 
   DelayedOperationImpl<Tag>* ScheduleExecution(Milliseconds delay,
-                                     Tag tag,
-                                     Operation operation) {
+                                               Tag tag,
+                                               Operation operation) {
     namespace chr = std::chrono;
     const dispatch_time_t delay_ns = dispatch_time(
         DISPATCH_TIME_NOW, chr::duration_cast<chr::nanoseconds>(delay).count());
@@ -184,14 +181,14 @@ class Executor {
         new DelayedOperationImpl<Tag>{this, delay, std::move(operation)};
     dispatch_after_f(delay_ns, dispatch_queue(), delayed_operation,
                      DelayedOperationImpl<Tag>::InvokedByLibdispatch);
-    operations_.push_back({tag, delayed_operation});
+    operations_.push_back(TaggedOperation{tag, delayed_operation});
     return delayed_operation;
   }
 
   void Remove(const DelayedOperationImpl<Tag>& to_remove) {
     const auto found = std::find_if(operations_.begin(), operations_.end(),
                                     [&to_remove](const TaggedOperation& op) {
-                                      return op.operation == &to_remove;
+                                      return op.op == &to_remove;
                                     });
     // It's possible for the operation to be missing if libdispatch gets to run
     // it after it was force-run, for example.
@@ -221,7 +218,11 @@ class Executor {
   std::atomic<dispatch_queue_t> dispatch_queue_;
   struct TaggedOperation {
     Tag tag{};
-    DelayedOperationImpl<Tag>* op_{};
+    DelayedOperationImpl<Tag>* op{};
+    TaggedOperation() {
+    }
+    TaggedOperation(Tag tag, DelayedOperationImpl<Tag>* op) : tag{tag}, op{op} {
+    }
   };
   std::vector<TaggedOperation> operations_;
 };
@@ -242,7 +243,8 @@ void DelayedOperationImpl<Tag>::RescheduleAsap() {
 template <typename Tag>
 void DelayedOperationImpl<Tag>::InvokedByLibdispatch(void* const raw_self) {
   auto const self = static_cast<DelayedOperationImpl*>(raw_self);
-  self->executor_->StartExecution([self] { self->Execute(); });
+  self->Execute();
+  // TODO: EnterCheckedOperation
   // StartExecution is a blocking operation.
   delete self;
 }
