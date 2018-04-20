@@ -68,7 +68,7 @@ TEST_F(SerialQueueTest, Enqueue) {
   EXPECT_TRUE(WaitForTestToFinish());
 }
 
-TEST_F(SerialQueueTest, EnqueueDisallowsEnqueuedTasksToUseEnqueue) {
+TEST_F(SerialQueueTest, EnqueueDisallowsNesting) {
   queue.Enqueue([&] {  // clang-format off
     // clang-format on
     EXPECT_ANY_THROW(queue.Enqueue([] {}););
@@ -78,7 +78,7 @@ TEST_F(SerialQueueTest, EnqueueDisallowsEnqueuedTasksToUseEnqueue) {
   EXPECT_TRUE(WaitForTestToFinish());
 }
 
-TEST_F(SerialQueueTest, EnqueueAllowsEnqueuedTasksToUseEnqueueAllowingNesting) {
+TEST_F(SerialQueueTest, EnqueueAllowingNestingWorksFromWithinEnqueue) {
   queue.Enqueue([&] {  // clang-format off
     queue.EnqueueAllowingNesting([&] { signal_finished(); });
     // clang-format on
@@ -87,7 +87,6 @@ TEST_F(SerialQueueTest, EnqueueAllowsEnqueuedTasksToUseEnqueueAllowingNesting) {
   EXPECT_TRUE(WaitForTestToFinish());
 }
 
-/*
 TEST_F(SerialQueueTest, SameQueueIsAllowedForUnownedActions) {
   dispatch_async_f(underlying_queue, this, [](void* const raw_self) {
     auto self = static_cast<SerialQueueTest*>(raw_self);
@@ -97,13 +96,14 @@ TEST_F(SerialQueueTest, SameQueueIsAllowedForUnownedActions) {
   EXPECT_TRUE(WaitForTestToFinish());
 }
 
+/*
 TEST_F(SerialQueueTest, EnqueueBlocking) {
   bool finished = false;
   queue.EnqueueBlocking([&] { finished = true; });
   EXPECT_TRUE(finished);
 }
 
-TEST_F(SerialQueueTest, RunSyncDisallowsEnqueuedTasksToUseEnqueue) {
+TEST_F(SerialQueueTest, EnqueueBlockingDisallowsNesting) {
   queue.EnqueueBlocking([&] {  // clang-format off
     EXPECT_ANY_THROW(queue.EnqueueBlocking([] {}););
     // clang-format on
