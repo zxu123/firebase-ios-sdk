@@ -32,34 +32,6 @@ namespace firebase {
 namespace firestore {
 namespace util {
 
-/**
- * Well-known "timer" ids used when scheduling delayed operations on the
- * AsyncQueue. These ids can then be used from tests to check for the
- * presence of delayed operations or to run them early.
- */
-enum class TimerId {
-  /** All can be used with `RunDelayedOperationsUntil` to run all timers. */
-  All,
-
-  /**
-   * The following 4 timers are used in `Stream` for the listen and write
-   * streams. The "Idle" timer is used to close the stream due to inactivity.
-   * The "ConnectionBackoff" timer is used to restart a stream once the
-   * appropriate backoff delay has elapsed.
-   */
-  ListenStreamIdle,
-  ListenStreamConnectionBackoff,
-  WriteStreamIdle,
-  WriteStreamConnectionBackoff,
-
-  /**
-   * A timer used in `OnlineStateTracker` to transition from
-   * `OnlineStateUnknown` to `Offline` after a set timeout, rather than waiting
-   * indefinitely for success or failure.
-   */
-  OnlineStateTimeout,
-};
-
 namespace internal {
 
 class AsyncQueueImpl;
@@ -192,6 +164,36 @@ class AsyncQueue {
  private:
   std::shared_ptr<internal::AsyncQueueImpl> impl_;
 };
+
+// Generic wrapper over dispatch_async_f, providing dispatch_async-like
+// interface: accepts an arbitrary invocable object in place of an Objective-C
+// block.
+template <typename Work>
+void DispatchAsync(const dispatch_queue_t queue, Work&& work) {
+  // Wrap the passed invocable object into a std::function. It's dynamically
+  // allocated to make sure the object is valid by the time libdispatch gets to
+  // it.
+  const auto wrap = new AsyncQueue::Operation(std::forward<Work>(work));
+
+  dispatch_async_f(queue, wrap, [](void* const raw_operation) {
+    const auto unwrap = static_cast<AsyncQueue::Operation*>(raw_operation);
+    (*unwrap)();
+    delete unwrap;
+  });
+}
+
+// Similar to DispatchAsync but wraps dispatch_sync_f.
+template <typename Work>
+void DispatchSync(const dispatch_queue_t queue, Work&& work) {
+  // Unlike dispatch_async_f, dispatch_sync_f blocks until the work passed to it
+  // is done, so passing a pointer to a local variable is okay.
+  AsyncQueue::Operation wrap{std::forward<Work>(work)};
+
+  dispatch_sync_f(queue, &wrap, [](void* const raw_operation) {
+    const auto unwrap = static_cast<AsyncQueue::Operation*>(raw_operation);
+    (*unwrap)();
+  });
+}
 
 }  // namespace util
 }  // namespace firestore
