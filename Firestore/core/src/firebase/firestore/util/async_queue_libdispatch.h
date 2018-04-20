@@ -36,33 +36,33 @@ absl::string_view StringViewFromLabel(const char* const label) {
   return label ? absl::string_view{label} : absl::string_view{""};
 }
 
-// DelayedOperationImpl
+// ScheduledOperation
 
 namespace internal {
 
-template <typename Tag>
+template <typename Callable>
 class Executor;
-using Operation = std::function<void()>;
+using Func = std::function<void()>;
 using Milliseconds = std::chrono::milliseconds;
 
 // All member functions, including the constructor, are *only* invoked on the
 // Firestore queue. The only exception is `operator<`.
-template <typename Tag>
-class DelayedOperationImpl {
+template <typename Callable>
+class ScheduledOperation {
  public:
-  DelayedOperationImpl(Executor<Tag>* const executor,
+  ScheduledOperation(Executor<Callable>* const executor,
                        const Milliseconds delay,
-                       Operation&& operation)
+                       Callable&& callable)
       : executor_{executor},
         target_time_{std::chrono::time_point_cast<Milliseconds>(
                          std::chrono::system_clock::now()) +
                      delay},
-        operation_{std::move(operation)} {
+        callable_{std::move(callable)} {
   }
 
   void Cancel();
   void RescheduleAsap();
-  bool operator<(const DelayedOperationImpl& rhs) const {
+  bool operator<(const ScheduledOperation& rhs) const {
     return target_time_ < rhs.target_time_;
   }
 
@@ -79,9 +79,9 @@ class DelayedOperationImpl {
   using TimePoint =
       std::chrono::time_point<std::chrono::system_clock, Milliseconds>;
 
-  Executor<Tag>* const executor_;
+  Executor<Callable>* const executor_;
   const TimePoint target_time_;  // Used for sorting
-  const Operation operation_;
+  const Callable callable_;
 
   // True if the operation has either been run or canceled.
   //
@@ -101,10 +101,10 @@ void DispatchAsync(const dispatch_queue_t queue, Work&& work) {
   // Wrap the passed invocable object into a std::function. It's dynamically
   // allocated to make sure the object is valid by the time libdispatch gets to
   // it.
-  const auto wrap = new Operation(std::forward<Work>(work));
+  const auto wrap = new Func(std::forward<Work>(work));
 
   dispatch_async_f(queue, wrap, [](void* const raw_operation) {
-    const auto unwrap = static_cast<Operation*>(raw_operation);
+    const auto unwrap = static_cast<Func*>(raw_operation);
     (*unwrap)();
     delete unwrap;
   });
@@ -115,15 +115,15 @@ template <typename Work>
 void DispatchSync(const dispatch_queue_t queue, Work&& work) {
   // Unlike dispatch_async_f, dispatch_sync_f blocks until the work passed to it
   // is done, so passing a pointer to a local variable is okay.
-  Operation wrap{std::forward<Work>(work)};
+  Func wrap{std::forward<Work>(work)};
 
   dispatch_sync_f(queue, &wrap, [](void* const raw_operation) {
-    const auto unwrap = static_cast<Operation*>(raw_operation);
+    const auto unwrap = static_cast<Func*>(raw_operation);
     (*unwrap)();
   });
 }
 
-template <typename Tag>
+template <typename Callable>
 class Executor {
  public:
   explicit Executor(const dispatch_queue_t dispatch_queue)
@@ -139,7 +139,7 @@ class Executor {
     // they try to access `Executor` after it gets destroyed.
     ExecuteBlocking([this] {
       for (auto operation : operations_) {
-        operation.op->MarkDone();
+        operation->MarkDone();
       }
     });
   }
@@ -151,16 +151,15 @@ class Executor {
     return GetCurrentQueueLabel();
   }
 
-  void Execute(Operation operation) {
+  void Execute(Func operation) {
     DispatchAsync(dispatch_queue(), std::move(operation));
   }
-  void ExecuteBlocking(Operation operation) {
+  void ExecuteBlocking(Func operation) {
     DispatchSync(dispatch_queue(), std::move(operation));
   }
 
-  DelayedOperationImpl<Tag>* ScheduleExecution(Milliseconds delay,
-                                               Tag tag,
-                                               Operation operation) {
+  ScheduledOperation<Callable>* ScheduleExecution(Milliseconds delay,
+                                               Callable operation) {
     namespace chr = std::chrono;
     const dispatch_time_t delay_ns = dispatch_time(
         DISPATCH_TIME_NOW, chr::duration_cast<chr::nanoseconds>(delay).count());
@@ -178,17 +177,17 @@ class Executor {
     // `operations_`.
 
     auto const delayed_operation =
-        new DelayedOperationImpl<Tag>{this, delay, std::move(operation)};
+        new ScheduledOperation<Callable>{this, delay, std::move(operation)};
     dispatch_after_f(delay_ns, dispatch_queue(), delayed_operation,
-                     DelayedOperationImpl<Tag>::InvokedByLibdispatch);
-    operations_.push_back(TaggedOperation{tag, delayed_operation});
+                     ScheduledOperation<Callable>::InvokedByLibdispatch);
+    operations_.push_back(delayed_operation);
     return delayed_operation;
   }
 
-  void Remove(const DelayedOperationImpl<Tag>& to_remove) {
+  void RemoveFromSchedule(const ScheduledOperation<Callable>& to_remove) {
     const auto found = std::find_if(operations_.begin(), operations_.end(),
-                                    [&to_remove](const TaggedOperation& op) {
-                                      return op.op == &to_remove;
+                                    [&to_remove](const ScheduledOperation<Callable>* op) {
+                                      return op == &to_remove;
                                     });
     // It's possible for the operation to be missing if libdispatch gets to run
     // it after it was force-run, for example.
@@ -216,41 +215,33 @@ class Executor {
   }
 
   std::atomic<dispatch_queue_t> dispatch_queue_;
-  struct TaggedOperation {
-    Tag tag{};
-    DelayedOperationImpl<Tag>* op{};
-    TaggedOperation() {
-    }
-    TaggedOperation(Tag tag, DelayedOperationImpl<Tag>* op) : tag{tag}, op{op} {
-    }
-  };
-  std::vector<TaggedOperation> operations_;
+  std::vector<ScheduledOperation<Callable>*> operations_;
 };
 
-template <typename Tag>
-void DelayedOperationImpl<Tag>::Cancel() {
+template <typename Callable>
+void ScheduledOperation<Callable>::Cancel() {
   if (!done_) {
     Dequeue();
   }
 }
 
-template <typename Tag>
-void DelayedOperationImpl<Tag>::RescheduleAsap() {
+template <typename Callable>
+void ScheduledOperation<Callable>::RescheduleAsap() {
   FIREBASE_ASSERT_MESSAGE(!done_, "TODO");
   executor_->Enqueue([this] { Execute(); });
 }
 
-template <typename Tag>
-void DelayedOperationImpl<Tag>::InvokedByLibdispatch(void* const raw_self) {
-  auto const self = static_cast<DelayedOperationImpl*>(raw_self);
+template <typename Callable>
+void ScheduledOperation<Callable>::InvokedByLibdispatch(void* const raw_self) {
+  auto const self = static_cast<ScheduledOperation*>(raw_self);
   self->Execute();
   // TODO: EnterCheckedOperation
   // StartExecution is a blocking operation.
   delete self;
 }
 
-template <typename Tag>
-void DelayedOperationImpl<Tag>::Execute() {
+template <typename Callable>
+void ScheduledOperation<Callable>::Execute() {
   if (done_) {
     return;
   }
@@ -259,13 +250,13 @@ void DelayedOperationImpl<Tag>::Execute() {
   MarkDone();
 
   FIREBASE_ASSERT_MESSAGE(
-      operation_, "DelayedOperationImpl contains invalid function object");
-  operation_();
+      callable_, "ScheduledOperation contains an invalid callable");
+  callable_();
 }
 
-template <typename Tag>
-void DelayedOperationImpl<Tag>::Dequeue() {
-  executor_->Remove(*this);
+template <typename Callable>
+void ScheduledOperation<Callable>::Dequeue() {
+  executor_->RemoveFromSchedule(*this);
 }
 
 }  // namespace internal
