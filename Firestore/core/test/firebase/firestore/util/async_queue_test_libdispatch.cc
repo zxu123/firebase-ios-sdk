@@ -177,7 +177,6 @@ TEST_F(SerialQueueTest, CanCancelDelayedCallbacks) {
   //     [&] { EXPECT_FALSE(queue.ContainsDelayedOperation(kTimerId1)); });
 }
 
-/*
 TEST_F(SerialQueueTest, DelayedOperationIsValidAfterTheOperationHasRun) {
   DelayedOperation delayed_operation;
   queue.Enqueue([&] {
@@ -188,10 +187,11 @@ TEST_F(SerialQueueTest, DelayedOperationIsValidAfterTheOperationHasRun) {
 
   EXPECT_TRUE(WaitForTestToFinish());
   // queue.EnqueueBlocking(
-      // [&] { EXPECT_FALSE(queue.ContainsDelayedOperation(kTimerId1)); });
-  EXPECT_NO_THROW(delayed_operation.Cancel());
+  // [&] { EXPECT_FALSE(queue.ContainsDelayedOperation(kTimerId1)); });
+  queue.EnqueueBlocking([&] { EXPECT_NO_THROW(delayed_operation.Cancel()); });
 }
 
+/*
 TEST_F(SerialQueueTest, CanManuallyDrainAllDelayedCallbacksForTesting) {
   std::string steps;
 
