@@ -114,7 +114,6 @@ TEST_F(SerialQueueTest, StartExecutionDisallowsNesting) {
       [&] { EXPECT_ANY_THROW(queue.StartExecution([] {});); });
 }
 
-/*
 TEST_F(SerialQueueTest, VerifyCalledFromOperationRequiresBeingCalledAsync) {
   ASSERT_NE(underlying_queue, dispatch_get_main_queue());
   EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
@@ -132,6 +131,7 @@ TEST_F(SerialQueueTest, VerifyCalledFromOperationWorksWithOperationInProgress) {
       [&] { EXPECT_NO_THROW(queue.VerifyCalledFromOperation()); });
 }
 
+/*
 TEST_F(SerialQueueTest, CanScheduleOperationsInTheFuture) {
   std::string steps;
 
