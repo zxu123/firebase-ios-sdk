@@ -149,7 +149,6 @@ TEST_F(SerialQueueTest, CanScheduleOperationsInTheFuture) {
   EXPECT_EQ(steps, "1234");
 }
 
-/*
 TEST_F(SerialQueueTest, CanCancelDelayedCallbacks) {
   std::string steps;
 
@@ -178,6 +177,7 @@ TEST_F(SerialQueueTest, CanCancelDelayedCallbacks) {
   //     [&] { EXPECT_FALSE(queue.ContainsDelayedOperation(kTimerId1)); });
 }
 
+/*
 TEST_F(SerialQueueTest, DelayedOperationIsValidAfterTheOperationHasRun) {
   DelayedOperation delayed_operation;
   queue.Enqueue([&] {
