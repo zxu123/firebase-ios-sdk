@@ -96,7 +96,6 @@ TEST_F(SerialQueueTest, SameQueueIsAllowedForUnownedActions) {
   EXPECT_TRUE(WaitForTestToFinish());
 }
 
-/*
 TEST_F(SerialQueueTest, EnqueueBlocking) {
   bool finished = false;
   queue.EnqueueBlocking([&] { finished = true; });
@@ -115,6 +114,7 @@ TEST_F(SerialQueueTest, StartExecutionDisallowsNesting) {
       [&] { EXPECT_ANY_THROW(queue.StartExecution([] {});); });
 }
 
+/*
 TEST_F(SerialQueueTest, VerifyCalledFromOperationRequiresBeingCalledAsync) {
   ASSERT_NE(underlying_queue, dispatch_get_main_queue());
   EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
