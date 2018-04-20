@@ -84,6 +84,7 @@ TEST_F(SerialQueueTest, EnqueueAllowsEnqueuedTasksToUseEnqueueAllowingNesting) {
   EXPECT_TRUE(WaitForTestToFinish());
 }
 
+/*
 TEST_F(SerialQueueTest, SameQueueIsAllowedForUnownedActions) {
   dispatch_async_f(underlying_queue, this, [](void* const raw_self) {
     auto self = static_cast<SerialQueueTest*>(raw_self);
@@ -225,6 +226,7 @@ TEST_F(SerialQueueTest, CanManuallyDrainSpecificDelayedCallbacksForTesting) {
   // queue.RunDelayedOperationsUntil(kTimerId3);
   EXPECT_EQ(steps, "1234");
 }
+*/
 
 }  // namespace util
 }  // namespace firestore
