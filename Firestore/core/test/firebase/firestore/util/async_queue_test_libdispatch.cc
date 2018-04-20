@@ -131,7 +131,6 @@ TEST_F(SerialQueueTest, VerifyCalledFromOperationWorksWithOperationInProgress) {
       [&] { EXPECT_NO_THROW(queue.VerifyCalledFromOperation()); });
 }
 
-/*
 TEST_F(SerialQueueTest, CanScheduleOperationsInTheFuture) {
   std::string steps;
 
@@ -150,6 +149,7 @@ TEST_F(SerialQueueTest, CanScheduleOperationsInTheFuture) {
   EXPECT_EQ(steps, "1234");
 }
 
+/*
 TEST_F(SerialQueueTest, CanCancelDelayedCallbacks) {
   std::string steps;
 
