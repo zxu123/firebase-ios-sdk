@@ -116,6 +116,8 @@ cc_library(
   SOURCES
     async_queue_libdispatch.cc
     async_queue_libdispatch.h
+    # FIXME OBC
+    async_queue.h
   DEPENDS
     absl_strings
     ${FIREBASE_FIRESTORE_UTIL_LOG}
