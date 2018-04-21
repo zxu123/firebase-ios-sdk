@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "Firestore/core/src/firebase/firestore/util/async_queue.h"
+#include "Firestore/core/src/firebase/firestore/util/executor_cpp.h"
 
 namespace firebase {
 namespace firestore {
@@ -25,7 +25,7 @@ void DelayedOperation::Cancel() {
   queue_->TryCancel(*this);
 }
 
-AsyncQueue::AsyncQueue() {
+Executor::Executor() {
   // Somewhat counter-intuitively, constructor of `std::atomic` assigns the
   // value non-atomically, so the atomic initialization must be provided here,
   // before the worker thread is started.
@@ -33,10 +33,10 @@ AsyncQueue::AsyncQueue() {
   // on the constructor.
   current_id_ = 0;
   shutting_down_ = false;
-  worker_thread_ = std::thread{&AsyncQueue::PollingThread, this};
+  worker_thread_ = std::thread{&Executor::PollingThread, this};
 }
 
-AsyncQueue::~AsyncQueue() {
+Executor::~Executor() {
   shutting_down_ = true;
   // Make sure the worker thread is not blocked, so that the call to `join`
   // doesn't hang.
@@ -44,32 +44,32 @@ AsyncQueue::~AsyncQueue() {
   worker_thread_.join();
 }
 
-void AsyncQueue::Enqueue(Operation&& operation) {
-  DoEnqueue(std::move(operation), Immediate());
+void Executor::Execute(Operation&& operation) {
+  DoExecute(std::move(operation), Immediate());
 }
 
-DelayedOperation AsyncQueue::EnqueueAfterDelay(const Milliseconds delay,
+DelayedOperation Executor::ScheduleExecution(const Milliseconds delay,
                                                Operation&& operation) {
   // While negative delay can be interpreted as a request for immediate
   // execution, supporting it would provide a hacky way to modify FIFO ordering
   // of immediate operations.
   FIREBASE_ASSERT_MESSAGE(delay.count() >= 0,
-                          "EnqueueAfterDelay: delay cannot be negative");
+                          "ScheduleExecution: delay cannot be negative");
 
   namespace chr = std::chrono;
 
   const auto now = chr::time_point_cast<Milliseconds>(chr::system_clock::now());
-  const auto id = DoEnqueue(std::move(operation), now + delay);
+  const auto id = DoExecute(std::move(operation), now + delay);
 
   return DelayedOperation{this, id};
 }
 
-void AsyncQueue::TryCancel(const DelayedOperation& operation) {
+void Executor::TryCancel(const DelayedOperation& operation) {
   const auto id = operation.id_;
   schedule_.RemoveIf(nullptr, [id](const Entry& e) { return e.id == id; });
 }
 
-AsyncQueue::Id AsyncQueue::DoEnqueue(Operation&& operation,
+Executor::Id Executor::DoExecute(Operation&& operation,
                                      const TimePoint when) {
   // Note: operations scheduled for immediate execution don't actually need an
   // id. This could be tweaked to reuse the same id for all such operations.
@@ -78,7 +78,7 @@ AsyncQueue::Id AsyncQueue::DoEnqueue(Operation&& operation,
   return id;
 }
 
-void AsyncQueue::PollingThread() {
+void Executor::PollingThread() {
   while (!shutting_down_) {
     Entry entry;
     schedule_.PopBlocking(&entry);
@@ -88,16 +88,16 @@ void AsyncQueue::PollingThread() {
   }
 }
 
-void AsyncQueue::UnblockQueue() {
+void Executor::UnblockQueue() {
   // Put a no-op for immediate execution on the queue to ensure that
   // `schedule_.PopBlocking` returns, and worker thread can notice that shutdown
   // is in progress.
   schedule_.Push(Entry{[] {}, /*id=*/0}, Immediate());
 }
 
-AsyncQueue::Id AsyncQueue::NextId() {
+Executor::Id Executor::NextId() {
   // The wrap around after ~4 billion operations is explicitly ignored. Even if
-  // an instance of `AsyncQueue` runs long enough to get `current_id_` to
+  // an instance of `Executor` runs long enough to get `current_id_` to
   // overflow, it's extremely unlikely that any object still holds a reference
   // that is old enough to cause a conflict.
   return current_id_++;

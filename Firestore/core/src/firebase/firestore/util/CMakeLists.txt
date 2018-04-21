@@ -117,6 +117,7 @@ cc_library(
     executor_libdispatch.cc
     executor_libdispatch.h
     # FIXME OBC
+    async_queue.cc
     async_queue.h
   DEPENDS
     absl_strings

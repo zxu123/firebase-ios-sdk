@@ -190,7 +190,7 @@ class Schedule {
   Container scheduled_;
 };
 
-class AsyncQueue;
+class Executor;
 
 // A non-owning handle to an operation scheduled in the future, allowing to
 // cancel the operation.
@@ -204,12 +204,12 @@ class DelayedOperation {
   using Id = unsigned int;
 
   // Don't allow callers to create their own `DelayedOperation`s.
-  friend class AsyncQueue;
-  DelayedOperation(AsyncQueue* const queue, const Id id)
+  friend class Executor;
+  DelayedOperation(Executor* const queue, const Id id)
       : queue_{queue}, id_{id} {
   }
 
-  AsyncQueue* const queue_ = nullptr;
+  Executor* const queue_ = nullptr;
   const Id id_ = 0;
 };
 
@@ -224,24 +224,34 @@ class DelayedOperation {
 // at any given time.
 //
 // Delayed operations may be canceled if they have not already been run.
-class AsyncQueue {
+class Executor {
  public:
   using Operation = std::function<void()>;
   using Milliseconds = std::chrono::milliseconds;
 
  public:
-  AsyncQueue();
-  ~AsyncQueue();
+  Executor();
+  ~Executor();
 
-  // Enqueues the `operation` for immediate execution on the background thread.
-  void Enqueue(Operation&& operation);
-  // Enqueues the `operation` for execution on the background thread once the
+  // Executes the `operation` for immediate execution on the background thread.
+  void Execute(Operation&& operation);
+  void ExecuteBlocking(Operation&& operation);
+
+  // Executes the `operation` for execution on the background thread once the
   // `delay` from now (according to the system clock) has passed. Returns
   // a handle which allows to cancel the delayed operation.
   //
-  // `delay` must be non-negative; use `Enqueue` to schedule operations for
+  // `delay` must be non-negative; use `Execute` to schedule operations for
   // immediate execution.
-  DelayedOperation EnqueueAfterDelay(Milliseconds delay, Operation&& operation);
+  /*ScheduledOperation<Callable>**/ DelayedOperation ScheduleExecution(Milliseconds delay, Operation&& operation);
+
+  bool IsAsyncCall() const;
+  std::string GetInvokerId() const;
+
+  void RemoveFromSchedule(const ScheduledOperation<Callable>* const to_remove);
+  bool IsScheduled(const Callable& callable) const;
+  bool IsScheduleEmpty() const;
+  Callable PopFromSchedule();
 
  private:
   using TimePoint = Schedule<Operation, Milliseconds>::TimePoint;
@@ -254,7 +264,7 @@ class AsyncQueue {
   // Otherwise, this function is a no-op.
   void TryCancel(const DelayedOperation& operation);
 
-  Id DoEnqueue(Operation&& operation, TimePoint when);
+  Id DoExecute(Operation&& operation, TimePoint when);
 
   void PollingThread();
   void UnblockQueue();
@@ -272,7 +282,7 @@ class AsyncQueue {
   struct Entry {
     Entry() {
     }
-    Entry(Operation&& operation, const AsyncQueue::Id id)
+    Entry(Operation&& operation, const Executor::Id id)
         : operation{std::move(operation)}, id{id} {
     }
     Operation operation;

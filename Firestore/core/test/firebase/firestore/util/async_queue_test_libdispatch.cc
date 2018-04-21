@@ -15,11 +15,13 @@
  */
 
 #include "Firestore/core/src/firebase/firestore/util/async_queue.h"
+#include "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
 
 #include <chrono>  // NOLINT(build/c++11)
 #include <future>  // NOLINT(build/c++11)
 #include <string>
 
+#include "absl/memory/memory.h"
 #include "gtest/gtest.h"
 
 namespace firebase {
@@ -35,15 +37,15 @@ const TimerId kTimerId3 = TimerId::WriteStreamConnectionBackoff;
 
 const auto kTimeout = std::chrono::seconds(5);
 
-using internal::Executor;
+using ExecutorT = internal::ExecutorLibdispatch<TimerId>;
 using internal::TaggedOperation;
 
-class SerialQueueTest : public ::testing::Test {
+class AsyncQueueTest : public ::testing::Test {
  public:
-  SerialQueueTest()
-      : underlying_queue{dispatch_queue_create("SerialQueueTests",
+  AsyncQueueTest()
+      : underlying_queue{dispatch_queue_create("AsyncQueueTests",
                                                DISPATCH_QUEUE_SERIAL)},
-        queue{absl::make_unique<Executor<TaggedOperation>>()},
+        queue{absl::make_unique<ExecutorT>(underlying_queue)},
         signal_finished{[] {}} {
   }
 
@@ -57,18 +59,18 @@ class SerialQueueTest : public ::testing::Test {
   }
 
   const dispatch_queue_t underlying_queue;
-  SerialQueue queue;
+  AsyncQueue queue;
   std::packaged_task<void()> signal_finished;
 };
 
 }  // namespace
 
-TEST_F(SerialQueueTest, Enqueue) {
+TEST_F(AsyncQueueTest, Enqueue) {
   queue.Enqueue([&] { signal_finished(); });
   EXPECT_TRUE(WaitForTestToFinish());
 }
 
-TEST_F(SerialQueueTest, EnqueueDisallowsNesting) {
+TEST_F(AsyncQueueTest, EnqueueDisallowsNesting) {
   queue.Enqueue([&] {  // clang-format off
     // clang-format on
     EXPECT_ANY_THROW(queue.Enqueue([] {}););
@@ -78,7 +80,7 @@ TEST_F(SerialQueueTest, EnqueueDisallowsNesting) {
   EXPECT_TRUE(WaitForTestToFinish());
 }
 
-TEST_F(SerialQueueTest, EnqueueAllowingNestingWorksFromWithinEnqueue) {
+TEST_F(AsyncQueueTest, EnqueueAllowingNestingWorksFromWithinEnqueue) {
   queue.Enqueue([&] {  // clang-format off
     queue.EnqueueAllowingNesting([&] { signal_finished(); });
     // clang-format on
@@ -87,56 +89,58 @@ TEST_F(SerialQueueTest, EnqueueAllowingNestingWorksFromWithinEnqueue) {
   EXPECT_TRUE(WaitForTestToFinish());
 }
 
-TEST_F(SerialQueueTest, SameQueueIsAllowedForUnownedActions) {
-  internal::DispatchAsync(underlying_queue,
-                [this] { queue.Enqueue([this] { signal_finished(); }); });
+TEST_F(AsyncQueueTest, SameQueueIsAllowedForUnownedActions) {
+  internal::DispatchAsync(underlying_queue, [this] {
+    queue.Enqueue([this] { signal_finished(); });
+  });
 
   EXPECT_TRUE(WaitForTestToFinish());
 }
 
-TEST_F(SerialQueueTest, EnqueueBlocking) {
+TEST_F(AsyncQueueTest, EnqueueBlocking) {
   bool finished = false;
   queue.EnqueueBlocking([&] { finished = true; });
   EXPECT_TRUE(finished);
 }
 
-TEST_F(SerialQueueTest, EnqueueBlockingDisallowsNesting) {
+TEST_F(AsyncQueueTest, EnqueueBlockingDisallowsNesting) {
   queue.EnqueueBlocking([&] {  // clang-format off
     EXPECT_ANY_THROW(queue.EnqueueBlocking([] {}););
     // clang-format on
   });
 }
 
-TEST_F(SerialQueueTest, StartExecutionDisallowsNesting) {
+TEST_F(AsyncQueueTest, StartExecutionDisallowsNesting) {
   queue.EnqueueBlocking(
       [&] { EXPECT_ANY_THROW(queue.StartExecution([] {});); });
 }
 
-TEST_F(SerialQueueTest, VerifyCalledFromOperationRequiresBeingCalledAsync) {
+TEST_F(AsyncQueueTest, VerifyCalledFromOperationRequiresBeingCalledAsync) {
   ASSERT_NE(underlying_queue, dispatch_get_main_queue());
   EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
 }
 
-TEST_F(SerialQueueTest, VerifyCalledFromOperationRequiresOperationInProgress) {
-  internal::DispatchSync(underlying_queue,
-               [this] { EXPECT_ANY_THROW(queue.VerifyCalledFromOperation()); });
+TEST_F(AsyncQueueTest, VerifyCalledFromOperationRequiresOperationInProgress) {
+  internal::DispatchSync(underlying_queue, [this] {
+    EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
+  });
 }
 
-TEST_F(SerialQueueTest, VerifyCalledFromOperationWorksWithOperationInProgress) {
+TEST_F(AsyncQueueTest, VerifyCalledFromOperationWorksWithOperationInProgress) {
   queue.EnqueueBlocking(
       [&] { EXPECT_NO_THROW(queue.VerifyCalledFromOperation()); });
 }
 
-TEST_F(SerialQueueTest, CanScheduleOperationsInTheFuture) {
+TEST_F(AsyncQueueTest, CanScheduleOperationsInTheFuture) {
   std::string steps;
 
   queue.Enqueue([&steps] { steps += '1'; });
   queue.Enqueue([&] {
-    queue.EnqueueAfterDelay(SerialQueue::Milliseconds(5), kTimerId1, [&] {
+    queue.EnqueueAfterDelay(AsyncQueue::Milliseconds(5), kTimerId1, [&] {
       steps += '4';
       signal_finished();
     });
-    queue.EnqueueAfterDelay(SerialQueue::Milliseconds(1), kTimerId2,
+    queue.EnqueueAfterDelay(AsyncQueue::Milliseconds(1), kTimerId2,
                             [&steps] { steps += '3'; });
     queue.EnqueueAllowingNesting([&steps] { steps += '2'; });
   });
@@ -145,7 +149,7 @@ TEST_F(SerialQueueTest, CanScheduleOperationsInTheFuture) {
   EXPECT_EQ(steps, "1234");
 }
 
-TEST_F(SerialQueueTest, CanCancelDelayedCallbacks) {
+TEST_F(AsyncQueueTest, CanCancelDelayedCallbacks) {
   std::string steps;
 
   queue.Enqueue([&] {
@@ -155,9 +159,9 @@ TEST_F(SerialQueueTest, CanCancelDelayedCallbacks) {
     queue.EnqueueAllowingNesting([&steps] { steps += '1'; });
 
     DelayedOperation delayed_operation = queue.EnqueueAfterDelay(
-        SerialQueue::Milliseconds(1), kTimerId1, [&steps] { steps += '2'; });
+        AsyncQueue::Milliseconds(1), kTimerId1, [&steps] { steps += '2'; });
 
-    queue.EnqueueAfterDelay(SerialQueue::Milliseconds(5), kTimerId2, [&] {
+    queue.EnqueueAfterDelay(AsyncQueue::Milliseconds(5), kTimerId2, [&] {
       steps += '3';
       signal_finished();
     });
@@ -172,11 +176,11 @@ TEST_F(SerialQueueTest, CanCancelDelayedCallbacks) {
   queue.EnqueueBlocking([&] { EXPECT_FALSE(queue.IsScheduled(kTimerId1)); });
 }
 
-TEST_F(SerialQueueTest, DelayedOperationIsValidAfterTheOperationHasRun) {
+TEST_F(AsyncQueueTest, DelayedOperationIsValidAfterTheOperationHasRun) {
   DelayedOperation delayed_operation;
   queue.Enqueue([&] {
     delayed_operation = queue.EnqueueAfterDelay(
-        SerialQueue::Milliseconds(10), kTimerId1, [&] { signal_finished(); });
+        AsyncQueue::Milliseconds(10), kTimerId1, [&] { signal_finished(); });
     EXPECT_TRUE(queue.IsScheduled(kTimerId1));
   });
 
@@ -185,14 +189,14 @@ TEST_F(SerialQueueTest, DelayedOperationIsValidAfterTheOperationHasRun) {
   queue.EnqueueBlocking([&] { EXPECT_NO_THROW(delayed_operation.Cancel()); });
 }
 
-TEST_F(SerialQueueTest, CanManuallyDrainAllDelayedCallbacksForTesting) {
+TEST_F(AsyncQueueTest, CanManuallyDrainAllDelayedCallbacksForTesting) {
   std::string steps;
 
   queue.Enqueue([&] {
     queue.EnqueueAllowingNesting([&steps] { steps += '1'; });
-    queue.EnqueueAfterDelay(SerialQueue::Milliseconds(20000), kTimerId1,
+    queue.EnqueueAfterDelay(AsyncQueue::Milliseconds(20000), kTimerId1,
                             [&] { steps += '4'; });
-    queue.EnqueueAfterDelay(SerialQueue::Milliseconds(10000), kTimerId2,
+    queue.EnqueueAfterDelay(AsyncQueue::Milliseconds(10000), kTimerId2,
                             [&steps] { steps += '3'; });
     queue.EnqueueAllowingNesting([&steps] { steps += '2'; });
     signal_finished();
@@ -203,16 +207,16 @@ TEST_F(SerialQueueTest, CanManuallyDrainAllDelayedCallbacksForTesting) {
   EXPECT_EQ(steps, "1234");
 }
 
-TEST_F(SerialQueueTest, CanManuallyDrainSpecificDelayedCallbacksForTesting) {
+TEST_F(AsyncQueueTest, CanManuallyDrainSpecificDelayedCallbacksForTesting) {
   std::string steps;
 
   queue.Enqueue([&] {
     queue.EnqueueAllowingNesting([&] { steps += '1'; });
-    queue.EnqueueAfterDelay(SerialQueue::Milliseconds(20000), kTimerId1,
+    queue.EnqueueAfterDelay(AsyncQueue::Milliseconds(20000), kTimerId1,
                             [&steps] { steps += '5'; });
-    queue.EnqueueAfterDelay(SerialQueue::Milliseconds(10000), kTimerId2,
+    queue.EnqueueAfterDelay(AsyncQueue::Milliseconds(10000), kTimerId2,
                             [&steps] { steps += '3'; });
-    queue.EnqueueAfterDelay(SerialQueue::Milliseconds(15000), kTimerId3,
+    queue.EnqueueAfterDelay(AsyncQueue::Milliseconds(15000), kTimerId3,
                             [&steps] { steps += '4'; });
     queue.EnqueueAllowingNesting([&] { steps += '2'; });
     signal_finished();

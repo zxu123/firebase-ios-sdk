@@ -24,6 +24,7 @@
 #include <memory>
 #include <vector>
 
+#include "Firestore/core/src/firebase/firestore/util/executor.h"
 #include "Firestore/core/src/firebase/firestore/util/firebase_assert.h"
 #include "absl/strings/string_view.h"
 
@@ -38,38 +39,37 @@ absl::string_view StringViewFromLabel(const char* const label) {
 
 namespace internal {
 
-template <typename Callable>
-class Executor;
+template <typename Tag>
+class ExecutorLibdispatch;
 using Func = std::function<void()>;
-using Milliseconds = std::chrono::milliseconds;
 
 // All member functions, including the constructor, are *only* invoked on the
 // Firestore queue. The only exception is `operator<`.
-template <typename Callable>
+template <typename Tag>
 class ScheduledOperation {
  public:
-  ScheduledOperation(Executor<Callable>* const executor,
+  ScheduledOperation(ExecutorLibdispatch<Tag>* const executor,
                      const Milliseconds delay,
-                     Callable&& callable)
+                     TaggedOperation<Tag>&& operation)
       : executor_{executor},
         target_time_{std::chrono::time_point_cast<Milliseconds>(
                          std::chrono::system_clock::now()) +
                      delay},
-        callable_{std::move(callable)} {
+        operation_{std::move(operation)} {
   }
 
   void Cancel();
 
-  Callable Unschedule() {
+  TaggedOperation<Tag> Unschedule() {
     RemoveFromSchedule();
-    return std::move(callable_);
+    return std::move(operation_);
   }
 
   bool operator<(const ScheduledOperation& rhs) const {
     return target_time_ < rhs.target_time_;
   }
-  bool operator==(const Callable& rhs) const {
-    return callable_ == rhs;
+  bool operator==(const Tag& tag) const {
+    return operation_.tag == tag;
   }
 
   void MarkDone() {
@@ -85,9 +85,9 @@ class ScheduledOperation {
   using TimePoint =
       std::chrono::time_point<std::chrono::system_clock, Milliseconds>;
 
-  Executor<Callable>* const executor_;
+  ExecutorLibdispatch<Tag>* const executor_;
   const TimePoint target_time_;  // Used for sorting
-  Callable callable_;
+  TaggedOperation<Tag> operation_;
 
   // True if the operation has either been run or canceled.
   //
@@ -131,20 +131,20 @@ void DispatchSync(const dispatch_queue_t queue, Work&& work) {
 
 // Executor
 
-template <typename Callable>
-class Executor {
+template <typename Tag>
+class ExecutorLibdispatch : public Executor<Tag> {
  public:
-  explicit Executor(const dispatch_queue_t dispatch_queue)
+  explicit ExecutorLibdispatch(const dispatch_queue_t dispatch_queue)
       : dispatch_queue_{dispatch_queue} {
   }
-  Executor()
-      : Executor{dispatch_queue_create("com.google.firebase.firestore",
-                                       DISPATCH_QUEUE_SERIAL)} {
+  ExecutorLibdispatch()
+      : ExecutorLibdispatch{dispatch_queue_create(
+            "com.google.firebase.firestore", DISPATCH_QUEUE_SERIAL)} {
   }
 
-  ~Executor() {
+  ~ExecutorLibdispatch() {
     // Turn any operations that might still be in the queue into no-ops, lest
-    // they try to access `Executor` after it gets destroyed.
+    // they try to access `ExecutorLibdispatch` after it gets destroyed.
     ExecuteBlocking([this] {
       while (!schedule_.empty()) {
         RemoveFromSchedule(schedule_.back());
@@ -152,22 +152,22 @@ class Executor {
     });
   }
 
-  bool IsAsyncCall() const {
+  bool IsAsyncCall() const override {
     return GetCurrentQueueLabel().data() == GetTargetQueueLabel().data();
   }
-  absl::string_view GetInvokerId() const {
-    return GetCurrentQueueLabel();
+  std::string GetInvokerId() const override {
+    return GetCurrentQueueLabel().data();
   }
 
-  void Execute(Func operation) {
+  void Execute(Operation&& operation) override {
     DispatchAsync(dispatch_queue(), std::move(operation));
   }
-  void ExecuteBlocking(Func operation) {
+  void ExecuteBlocking(Operation&& operation) override {
     DispatchSync(dispatch_queue(), std::move(operation));
   }
 
-  ScheduledOperation<Callable>* ScheduleExecution(Milliseconds delay,
-                                                  Callable callable) {
+  ScheduledOperationHandle ScheduleExecution(Milliseconds delay,
+                                             TaggedOperation<Tag>&& operation) override {
     namespace chr = std::chrono;
     const dispatch_time_t delay_ns = dispatch_time(
         DISPATCH_TIME_NOW, chr::duration_cast<chr::nanoseconds>(delay).count());
@@ -185,17 +185,18 @@ class Executor {
     // `schedule_`.
 
     auto const delayed_operation =
-        new ScheduledOperation<Callable>{this, delay, std::move(callable)};
+        new ScheduledOperation<Tag>{this, delay, std::move(operation)};
     dispatch_after_f(delay_ns, dispatch_queue(), delayed_operation,
-                     ScheduledOperation<Callable>::InvokedByLibdispatch);
+                     ScheduledOperation<Tag>::InvokedByLibdispatch);
     schedule_.push_back(delayed_operation);
-    return delayed_operation;
+    return ScheduledOperationHandle{
+        [this, delayed_operation] { RemoveFromSchedule(delayed_operation); }};
   }
 
-  void RemoveFromSchedule(const ScheduledOperation<Callable>* const to_remove) {
+  void RemoveFromSchedule(const ScheduledOperation<Tag>* const to_remove) {
     const auto found =
         std::find_if(schedule_.begin(), schedule_.end(),
-                     [to_remove](const ScheduledOperation<Callable>* op) {
+                     [to_remove](const ScheduledOperation<Tag>* op) {
                        return op == to_remove;
                      });
     // It's possible for the operation to be missing if libdispatch gets to run
@@ -206,24 +207,21 @@ class Executor {
     }
   }
 
-  bool IsScheduled(const Callable& callable) const {
-    return std::find_if(
-               schedule_.begin(), schedule_.end(),
-               [&callable](
-                   const ScheduledOperation<Callable>* const operation) {
-                 return *operation == callable;
-               }) != schedule_.end();
+  bool IsScheduled(const Tag& tag) const override {
+    return std::find_if(schedule_.begin(), schedule_.end(),
+                        [&tag](const ScheduledOperation<Tag>* const operation) {
+                          return *operation == tag;
+                        }) != schedule_.end();
   }
 
-  bool IsScheduleEmpty() const {
+  bool IsScheduleEmpty() const override {
     return schedule_.empty();
   }
 
-  Callable PopFromSchedule() {
-    std::sort(
-        schedule_.begin(), schedule_.end(),
-        [](const ScheduledOperation<Callable>* lhs,
-           const ScheduledOperation<Callable>* rhs) { return *lhs < *rhs; });
+  TaggedOperation<Tag> PopFromSchedule() override {
+    std::sort(schedule_.begin(), schedule_.end(),
+              [](const ScheduledOperation<Tag>* lhs,
+                 const ScheduledOperation<Tag>* rhs) { return *lhs < *rhs; });
     const auto nearest = schedule_.begin();
     return (*nearest)->Unschedule();
   }
@@ -247,38 +245,39 @@ class Executor {
   }
 
   std::atomic<dispatch_queue_t> dispatch_queue_;
-  std::vector<ScheduledOperation<Callable>*> schedule_;
+  std::vector<ScheduledOperation<Tag>*> schedule_;
 };
 
-template <typename Callable>
-void ScheduledOperation<Callable>::Cancel() {
+template <typename Tag>
+void ScheduledOperation<Tag>::Cancel() {
   if (!done_) {
     RemoveFromSchedule();
   }
 }
 
-template <typename Callable>
-void ScheduledOperation<Callable>::InvokedByLibdispatch(void* const raw_self) {
+template <typename Tag>
+void ScheduledOperation<Tag>::InvokedByLibdispatch(void* const raw_self) {
   auto const self = static_cast<ScheduledOperation*>(raw_self);
   self->Execute();
   delete self;
 }
 
-template <typename Callable>
-void ScheduledOperation<Callable>::Execute() {
+template <typename Tag>
+void ScheduledOperation<Tag>::Execute() {
   if (done_) {
     return;
   }
 
   RemoveFromSchedule();
 
-  FIREBASE_ASSERT_MESSAGE(callable_,
-                          "ScheduledOperation contains an invalid callable");
-  callable_();
+  FIREBASE_ASSERT_MESSAGE(
+      operation_.operation,
+      "ScheduledOperation contains an invalid function object");
+  operation_.operation();
 }
 
-template <typename Callable>
-void ScheduledOperation<Callable>::RemoveFromSchedule() {
+template <typename Tag>
+void ScheduledOperation<Tag>::RemoveFromSchedule() {
   executor_->RemoveFromSchedule(this);
 }
 
