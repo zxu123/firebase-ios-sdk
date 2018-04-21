@@ -225,13 +225,18 @@ class ExecutorStd : public Executor {
   ScheduledOperationHandle ScheduleExecution(
       Milliseconds delay, TaggedOperation&& operation) override;
 
-  // bool IsAsyncCall() const override;
-  // std::string GetInvokerId() const override;
+  bool IsAsyncCall() const override;
+  std::string GetInvokerId() const override;
 
-  // void RemoveFromSchedule(const ScheduledOperation<Callable>* const
-  // to_remove) override; bool IsScheduled(const Callable& callable) const
-  // override; bool IsScheduleEmpty() const override; Callable PopFromSchedule()
-  // override;
+  bool IsScheduled(Tag tag) const override {
+    return {};
+  }
+  bool IsScheduleEmpty() const override {
+    return {};
+  }
+  TaggedOperation PopFromSchedule() override {
+    return {};
+  }
 
  private:
   using TimePoint = Schedule<Operation, Milliseconds>::TimePoint;
@@ -261,11 +266,14 @@ class ExecutorStd : public Executor {
   struct Entry {
     Entry() {
     }
-    Entry(Operation&& operation, const ExecutorStd::Id id)
-        : operation{std::move(operation)}, id{id} {
+    Entry(Operation&& operation,
+          const ExecutorStd::Id id,
+          const ExecutorStd::Tag tag)
+        : operation{std::move(operation)}, id{id}, tag{tag} {
     }
     Operation operation;
     Id id = 0;
+    Tag tag = 0;
   };
   // Operations scheduled for immediate execution are also put on the schedule
   // (with due time set to `Immediate`).

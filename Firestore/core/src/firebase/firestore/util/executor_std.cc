@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "Firestore/core/src/firebase/firestore/util/executor_cpp.h"
+#include "Firestore/core/src/firebase/firestore/util/executor_std.h"
 
 namespace firebase {
 namespace firestore {
@@ -61,8 +61,8 @@ ScheduledOperationHandle ExecutorStd::ScheduleExecution(
 }
 
 void ExecutorStd::TryCancel(const Id operation_id) {
-  schedule_.RemoveIf(nullptr,
-                     [operation_id](const Entry& e) { return e.id == operation_id; });
+  schedule_.RemoveIf(
+      nullptr, [operation_id](const Entry& e) { return e.id == operation_id; });
 }
 
 ExecutorStd::Id ExecutorStd::DoExecute(Operation&& operation,
@@ -97,6 +97,23 @@ ExecutorStd::Id ExecutorStd::NextId() {
   // overflow, it's extremely unlikely that any object still holds a reference
   // that is old enough to cause a conflict.
   return current_id_++;
+}
+
+namespace {
+
+std::string PrintThreadId(const std::thread::id thread_id) {
+  const auto hashed = std::hash<std::thread::id>{}(thread_id);
+  return std::to_string(hashed);
+}
+
+}  // namespace
+
+bool ExecutorStd::IsAsyncCall() const {
+  return GetInvokerId() != PrintThreadId(worker_thread_.get_id());
+}
+
+std::string ExecutorStd::GetInvokerId() const {
+  return PrintThreadId(std::this_thread::get_id());
 }
 
 }  // namespace internal
