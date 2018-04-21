@@ -99,13 +99,11 @@ class DelayedOperation {
   friend class SerialQueue;
   DelayedOperation(
       const SerialQueue* const queue,
-      internal::Executor<internal::TaggedOperation>* const executor,
       internal::ScheduledOperation<internal::TaggedOperation>* const operation)
-      : queue_{queue}, executor_{executor}, operation_{operation} {
+      : queue_{queue}, operation_{operation} {
   }
 
   const SerialQueue* queue_{};
-  internal::Executor<internal::TaggedOperation>* executor_{};
   internal::ScheduledOperation<internal::TaggedOperation>* operation_{};
 };
 
@@ -171,7 +169,7 @@ class SerialQueue {
     internal::TaggedOperation tagged_operation{timer_id, Wrap(operation)};
     const auto operation_impl =
         executor_->ScheduleExecution(delay, std::move(tagged_operation));
-    return DelayedOperation{this, executor_.get(), operation_impl};
+    return DelayedOperation{this, operation_impl};
   }
 
   void VerifyIsAsyncCall() const {
@@ -200,6 +198,12 @@ class SerialQueue {
   }
 
  private:
+  friend class DelayedOperation;
+  void Cancel(const DelayedOperation& to_cancel) {
+    VerifyIsAsyncCall();
+    executor_->RemoveFromSchedule(&to_cancel);
+  }
+
   Operation Wrap(const Operation& operation) {
     return [this, operation] { StartExecution(operation); };
   }
@@ -218,8 +222,7 @@ class SerialQueue {
 };
 
 void DelayedOperation::Cancel() {
-  queue_->VerifyIsAsyncCall();
-  executor_->RemoveFromSchedule(*operation_);
+  queue_->RemoveFromSchedule(*operation_);
 }
 
 }  // namespace util
