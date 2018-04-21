@@ -26,7 +26,7 @@
 #include "absl/memory/memory.h"
 #include "absl/strings/string_view.h"
 
-#include "Firestore/core/src/firebase/firestore/util/async_queue_libdispatch.h"
+#include "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
 #include "Firestore/core/src/firebase/firestore/util/firebase_assert.h"
 
 namespace firebase {

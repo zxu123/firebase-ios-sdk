@@ -114,8 +114,8 @@ check_symbol_exists(dispatch_async_f dispatch/dispatch.h HAVE_LIBDISPATCH)
 cc_library(
   firebase_firestore_util_async_queue_libdispatch
   SOURCES
-    async_queue_libdispatch.cc
-    async_queue_libdispatch.h
+    executor_libdispatch.cc
+    executor_libdispatch.h
     # FIXME OBC
     async_queue.h
   DEPENDS
@@ -127,7 +127,7 @@ cc_library(
 if(HAVE_LIBDISPATCH)
   set(
     FIREBASE_FIRESTORE_UTIL_ASYNC_QUEUE
-    firebase_firestore_util_async_queue_libdispatch
+    firebase_firestore_util_executor_libdispatch
   )
 
 else()
