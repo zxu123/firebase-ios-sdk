@@ -248,7 +248,7 @@ class ExecutorStd : public Executor {
   // Otherwise, this function is a no-op.
   void TryCancel(Id operation_id);
 
-  Id DoExecute(Operation&& operation, TimePoint when);
+  Id DoExecute(Operation&& operation, TimePoint when, Tag tag = -1);
 
   void PollingThread();
   void UnblockQueue();
@@ -273,7 +273,7 @@ class ExecutorStd : public Executor {
     }
     Operation operation;
     Id id = 0;
-    Tag tag = 0;
+    Tag tag = -1;
   };
   // Operations scheduled for immediate execution are also put on the schedule
   // (with due time set to `Immediate`).

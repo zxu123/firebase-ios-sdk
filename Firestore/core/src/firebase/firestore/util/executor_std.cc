@@ -55,7 +55,8 @@ ScheduledOperationHandle ExecutorStd::ScheduleExecution(
   namespace chr = std::chrono;
 
   const auto now = chr::time_point_cast<Milliseconds>(chr::system_clock::now());
-  const auto id = DoExecute(std::move(operation.operation), now + delay);
+  const auto id =
+      DoExecute(std::move(operation.operation), now + delay, operation.tag);
 
   return ScheduledOperationHandle{[this, id] { TryCancel(id); }};
 }
@@ -66,11 +67,12 @@ void ExecutorStd::TryCancel(const Id operation_id) {
 }
 
 ExecutorStd::Id ExecutorStd::DoExecute(Operation&& operation,
-                                       const TimePoint when) {
+                                       const TimePoint when,
+                                       const Tag tag) {
   // Note: operations scheduled for immediate execution don't actually need an
   // id. This could be tweaked to reuse the same id for all such operations.
   const auto id = NextId();
-  schedule_.Push(Entry{std::move(operation), id}, when);
+  schedule_.Push(Entry{std::move(operation), id, tag}, when);
   return id;
 }
 
@@ -88,7 +90,7 @@ void ExecutorStd::UnblockQueue() {
   // Put a no-op for immediate execution on the queue to ensure that
   // `schedule_.PopBlocking` returns, and worker thread can notice that shutdown
   // is in progress.
-  schedule_.Push(Entry{[] {}, /*id=*/0}, Immediate());
+  schedule_.Push(Entry{[] {}, /*id=*/0, /*tag=*/-1}, Immediate());
 }
 
 ExecutorStd::Id ExecutorStd::NextId() {
