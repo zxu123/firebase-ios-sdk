@@ -27,11 +27,13 @@
 #include <thread>  // NOLINT(build/c++11)
 #include <utility>
 
+#include "Firestore/core/src/firebase/firestore/util/executor.h"
 #include "Firestore/core/src/firebase/firestore/util/firebase_assert.h"
 
 namespace firebase {
 namespace firestore {
 namespace util {
+namespace internal {
 
 // A thread-safe class similar to a priority queue where the entries are
 // prioritized by the time for which they're scheduled. Entries scheduled for
@@ -190,29 +192,6 @@ class Schedule {
   Container scheduled_;
 };
 
-class Executor;
-
-// A non-owning handle to an operation scheduled in the future, allowing to
-// cancel the operation.
-class DelayedOperation {
- public:
-  // If the operation has not been run yet, cancels the operation. Otherwise,
-  // it's a no-op.
-  void Cancel();
-
- private:
-  using Id = unsigned int;
-
-  // Don't allow callers to create their own `DelayedOperation`s.
-  friend class Executor;
-  DelayedOperation(Executor* const queue, const Id id)
-      : queue_{queue}, id_{id} {
-  }
-
-  Executor* const queue_ = nullptr;
-  const Id id_ = 0;
-};
-
 // A serial queue that executes provided operations on a dedicated background
 // thread.
 //
@@ -224,18 +203,18 @@ class DelayedOperation {
 // at any given time.
 //
 // Delayed operations may be canceled if they have not already been run.
-class Executor {
+class ExecutorStd : public Executor {
  public:
   using Operation = std::function<void()>;
   using Milliseconds = std::chrono::milliseconds;
 
  public:
-  Executor();
-  ~Executor();
+  ExecutorStd();
+  ~ExecutorStd();
 
   // Executes the `operation` for immediate execution on the background thread.
-  void Execute(Operation&& operation);
-  void ExecuteBlocking(Operation&& operation);
+  void Execute(Operation&& operation) override;
+  void ExecuteBlocking(Operation&& operation) override;
 
   // Executes the `operation` for execution on the background thread once the
   // `delay` from now (according to the system clock) has passed. Returns
@@ -243,26 +222,26 @@ class Executor {
   //
   // `delay` must be non-negative; use `Execute` to schedule operations for
   // immediate execution.
-  /*ScheduledOperation<Callable>**/ DelayedOperation ScheduleExecution(Milliseconds delay, Operation&& operation);
+  ScheduledOperationHandle ScheduleExecution(
+      Milliseconds delay, TaggedOperation&& operation) override;
 
-  bool IsAsyncCall() const;
-  std::string GetInvokerId() const;
+  // bool IsAsyncCall() const override;
+  // std::string GetInvokerId() const override;
 
-  void RemoveFromSchedule(const ScheduledOperation<Callable>* const to_remove);
-  bool IsScheduled(const Callable& callable) const;
-  bool IsScheduleEmpty() const;
-  Callable PopFromSchedule();
+  // void RemoveFromSchedule(const ScheduledOperation<Callable>* const
+  // to_remove) override; bool IsScheduled(const Callable& callable) const
+  // override; bool IsScheduleEmpty() const override; Callable PopFromSchedule()
+  // override;
 
  private:
   using TimePoint = Schedule<Operation, Milliseconds>::TimePoint;
   // To allow canceling operations, each scheduled operation is assigned
   // a monotonically increasing identifier.
-  using Id = DelayedOperation::Id;
+  using Id = unsigned int;
 
-  friend class DelayedOperation;  // For access to `TryCancel`
   // If the operation hasn't yet been run, it will be removed from the queue.
   // Otherwise, this function is a no-op.
-  void TryCancel(const DelayedOperation& operation);
+  void TryCancel(Id operation_id);
 
   Id DoExecute(Operation&& operation, TimePoint when);
 
@@ -282,7 +261,7 @@ class Executor {
   struct Entry {
     Entry() {
     }
-    Entry(Operation&& operation, const Executor::Id id)
+    Entry(Operation&& operation, const ExecutorStd::Id id)
         : operation{std::move(operation)}, id{id} {
     }
     Operation operation;
@@ -299,6 +278,7 @@ class Executor {
   std::atomic<Id> current_id_{0};
 };
 
+}  // namespace internal
 }  // namespace util
 }  // namespace firestore
 }  // namespace firebase

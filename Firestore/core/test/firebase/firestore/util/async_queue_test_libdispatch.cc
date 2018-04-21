@@ -37,7 +37,7 @@ const TimerId kTimerId3 = TimerId::WriteStreamConnectionBackoff;
 
 const auto kTimeout = std::chrono::seconds(5);
 
-using ExecutorT = internal::ExecutorLibdispatch<TimerId>;
+using ExecutorT = internal::ExecutorLibdispatch;
 using internal::TaggedOperation;
 
 class AsyncQueueTest : public ::testing::Test {

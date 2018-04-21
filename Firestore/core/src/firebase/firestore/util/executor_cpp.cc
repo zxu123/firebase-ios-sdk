@@ -19,13 +19,9 @@
 namespace firebase {
 namespace firestore {
 namespace util {
+namespace internal {
 
-void DelayedOperation::Cancel() {
-  FIREBASE_ASSERT_MESSAGE(queue_, "Null pointer to queue.");
-  queue_->TryCancel(*this);
-}
-
-Executor::Executor() {
+ExecutorStd::ExecutorStd() {
   // Somewhat counter-intuitively, constructor of `std::atomic` assigns the
   // value non-atomically, so the atomic initialization must be provided here,
   // before the worker thread is started.
@@ -33,10 +29,10 @@ Executor::Executor() {
   // on the constructor.
   current_id_ = 0;
   shutting_down_ = false;
-  worker_thread_ = std::thread{&Executor::PollingThread, this};
+  worker_thread_ = std::thread{&ExecutorStd::PollingThread, this};
 }
 
-Executor::~Executor() {
+ExecutorStd::~ExecutorStd() {
   shutting_down_ = true;
   // Make sure the worker thread is not blocked, so that the call to `join`
   // doesn't hang.
@@ -44,12 +40,12 @@ Executor::~Executor() {
   worker_thread_.join();
 }
 
-void Executor::Execute(Operation&& operation) {
+void ExecutorStd::Execute(Operation&& operation) {
   DoExecute(std::move(operation), Immediate());
 }
 
-DelayedOperation Executor::ScheduleExecution(const Milliseconds delay,
-                                               Operation&& operation) {
+ScheduledOperationHandle ExecutorStd::ScheduleExecution(
+    const Milliseconds delay, TaggedOperation&& operation) {
   // While negative delay can be interpreted as a request for immediate
   // execution, supporting it would provide a hacky way to modify FIFO ordering
   // of immediate operations.
@@ -59,18 +55,18 @@ DelayedOperation Executor::ScheduleExecution(const Milliseconds delay,
   namespace chr = std::chrono;
 
   const auto now = chr::time_point_cast<Milliseconds>(chr::system_clock::now());
-  const auto id = DoExecute(std::move(operation), now + delay);
+  const auto id = DoExecute(std::move(operation.operation), now + delay);
 
-  return DelayedOperation{this, id};
+  return ScheduledOperationHandle{[this, id] { TryCancel(id); }};
 }
 
-void Executor::TryCancel(const DelayedOperation& operation) {
-  const auto id = operation.id_;
-  schedule_.RemoveIf(nullptr, [id](const Entry& e) { return e.id == id; });
+void ExecutorStd::TryCancel(const Id operation_id) {
+  schedule_.RemoveIf(nullptr,
+                     [operation_id](const Entry& e) { return e.id == operation_id; });
 }
 
-Executor::Id Executor::DoExecute(Operation&& operation,
-                                     const TimePoint when) {
+ExecutorStd::Id ExecutorStd::DoExecute(Operation&& operation,
+                                       const TimePoint when) {
   // Note: operations scheduled for immediate execution don't actually need an
   // id. This could be tweaked to reuse the same id for all such operations.
   const auto id = NextId();
@@ -78,7 +74,7 @@ Executor::Id Executor::DoExecute(Operation&& operation,
   return id;
 }
 
-void Executor::PollingThread() {
+void ExecutorStd::PollingThread() {
   while (!shutting_down_) {
     Entry entry;
     schedule_.PopBlocking(&entry);
@@ -88,21 +84,22 @@ void Executor::PollingThread() {
   }
 }
 
-void Executor::UnblockQueue() {
+void ExecutorStd::UnblockQueue() {
   // Put a no-op for immediate execution on the queue to ensure that
   // `schedule_.PopBlocking` returns, and worker thread can notice that shutdown
   // is in progress.
   schedule_.Push(Entry{[] {}, /*id=*/0}, Immediate());
 }
 
-Executor::Id Executor::NextId() {
+ExecutorStd::Id ExecutorStd::NextId() {
   // The wrap around after ~4 billion operations is explicitly ignored. Even if
-  // an instance of `Executor` runs long enough to get `current_id_` to
+  // an instance of `ExecutorStd` runs long enough to get `current_id_` to
   // overflow, it's extremely unlikely that any object still holds a reference
   // that is old enough to cause a conflict.
   return current_id_++;
 }
 
+}  // namespace internal
 }  // namespace util
 }  // namespace firestore
 }  // namespace firebase

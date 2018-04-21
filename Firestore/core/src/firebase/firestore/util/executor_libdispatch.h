@@ -39,18 +39,16 @@ absl::string_view StringViewFromLabel(const char* const label) {
 
 namespace internal {
 
-template <typename Tag>
 class ExecutorLibdispatch;
 using Func = std::function<void()>;
 
 // All member functions, including the constructor, are *only* invoked on the
 // Firestore queue. The only exception is `operator<`.
-template <typename Tag>
 class ScheduledOperation {
  public:
-  ScheduledOperation(ExecutorLibdispatch<Tag>* const executor,
+  ScheduledOperation(ExecutorLibdispatch* const executor,
                      const Milliseconds delay,
-                     TaggedOperation<Tag>&& operation)
+                     TaggedOperation&& operation)
       : executor_{executor},
         target_time_{std::chrono::time_point_cast<Milliseconds>(
                          std::chrono::system_clock::now()) +
@@ -60,7 +58,7 @@ class ScheduledOperation {
 
   void Cancel();
 
-  TaggedOperation<Tag> Unschedule() {
+  TaggedOperation Unschedule() {
     RemoveFromSchedule();
     return std::move(operation_);
   }
@@ -68,7 +66,7 @@ class ScheduledOperation {
   bool operator<(const ScheduledOperation& rhs) const {
     return target_time_ < rhs.target_time_;
   }
-  bool operator==(const Tag& tag) const {
+  bool operator==(const internal::TaggedOperation::Tag tag) const {
     return operation_.tag == tag;
   }
 
@@ -85,9 +83,9 @@ class ScheduledOperation {
   using TimePoint =
       std::chrono::time_point<std::chrono::system_clock, Milliseconds>;
 
-  ExecutorLibdispatch<Tag>* const executor_;
+  ExecutorLibdispatch* const executor_;
   const TimePoint target_time_;  // Used for sorting
-  TaggedOperation<Tag> operation_;
+  TaggedOperation operation_;
 
   // True if the operation has either been run or canceled.
   //
@@ -131,8 +129,7 @@ void DispatchSync(const dispatch_queue_t queue, Work&& work) {
 
 // Executor
 
-template <typename Tag>
-class ExecutorLibdispatch : public Executor<Tag> {
+class ExecutorLibdispatch : public Executor {
  public:
   explicit ExecutorLibdispatch(const dispatch_queue_t dispatch_queue)
       : dispatch_queue_{dispatch_queue} {
@@ -167,7 +164,7 @@ class ExecutorLibdispatch : public Executor<Tag> {
   }
 
   ScheduledOperationHandle ScheduleExecution(Milliseconds delay,
-                                             TaggedOperation<Tag>&& operation) override {
+                                             TaggedOperation&& operation) override {
     namespace chr = std::chrono;
     const dispatch_time_t delay_ns = dispatch_time(
         DISPATCH_TIME_NOW, chr::duration_cast<chr::nanoseconds>(delay).count());
@@ -185,18 +182,18 @@ class ExecutorLibdispatch : public Executor<Tag> {
     // `schedule_`.
 
     auto const delayed_operation =
-        new ScheduledOperation<Tag>{this, delay, std::move(operation)};
+        new ScheduledOperation{this, delay, std::move(operation)};
     dispatch_after_f(delay_ns, dispatch_queue(), delayed_operation,
-                     ScheduledOperation<Tag>::InvokedByLibdispatch);
+                     ScheduledOperation::InvokedByLibdispatch);
     schedule_.push_back(delayed_operation);
     return ScheduledOperationHandle{
         [this, delayed_operation] { RemoveFromSchedule(delayed_operation); }};
   }
 
-  void RemoveFromSchedule(const ScheduledOperation<Tag>* const to_remove) {
+  void RemoveFromSchedule(const ScheduledOperation* const to_remove) {
     const auto found =
         std::find_if(schedule_.begin(), schedule_.end(),
-                     [to_remove](const ScheduledOperation<Tag>* op) {
+                     [to_remove](const ScheduledOperation* op) {
                        return op == to_remove;
                      });
     // It's possible for the operation to be missing if libdispatch gets to run
@@ -207,9 +204,9 @@ class ExecutorLibdispatch : public Executor<Tag> {
     }
   }
 
-  bool IsScheduled(const Tag& tag) const override {
+  bool IsScheduled(const Tag tag) const override {
     return std::find_if(schedule_.begin(), schedule_.end(),
-                        [&tag](const ScheduledOperation<Tag>* const operation) {
+                        [&tag](const ScheduledOperation* const operation) {
                           return *operation == tag;
                         }) != schedule_.end();
   }
@@ -218,10 +215,10 @@ class ExecutorLibdispatch : public Executor<Tag> {
     return schedule_.empty();
   }
 
-  TaggedOperation<Tag> PopFromSchedule() override {
+  TaggedOperation PopFromSchedule() override {
     std::sort(schedule_.begin(), schedule_.end(),
-              [](const ScheduledOperation<Tag>* lhs,
-                 const ScheduledOperation<Tag>* rhs) { return *lhs < *rhs; });
+              [](const ScheduledOperation* lhs,
+                 const ScheduledOperation* rhs) { return *lhs < *rhs; });
     const auto nearest = schedule_.begin();
     return (*nearest)->Unschedule();
   }
@@ -245,25 +242,22 @@ class ExecutorLibdispatch : public Executor<Tag> {
   }
 
   std::atomic<dispatch_queue_t> dispatch_queue_;
-  std::vector<ScheduledOperation<Tag>*> schedule_;
+  std::vector<ScheduledOperation*> schedule_;
 };
 
-template <typename Tag>
-void ScheduledOperation<Tag>::Cancel() {
+void ScheduledOperation::Cancel() {
   if (!done_) {
     RemoveFromSchedule();
   }
 }
 
-template <typename Tag>
-void ScheduledOperation<Tag>::InvokedByLibdispatch(void* const raw_self) {
+void ScheduledOperation::InvokedByLibdispatch(void* const raw_self) {
   auto const self = static_cast<ScheduledOperation*>(raw_self);
   self->Execute();
   delete self;
 }
 
-template <typename Tag>
-void ScheduledOperation<Tag>::Execute() {
+void ScheduledOperation::Execute() {
   if (done_) {
     return;
   }
@@ -276,8 +270,7 @@ void ScheduledOperation<Tag>::Execute() {
   operation_.operation();
 }
 
-template <typename Tag>
-void ScheduledOperation<Tag>::RemoveFromSchedule() {
+void ScheduledOperation::RemoveFromSchedule() {
   executor_->RemoveFromSchedule(this);
 }
 

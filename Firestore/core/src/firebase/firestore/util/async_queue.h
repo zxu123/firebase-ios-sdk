@@ -74,10 +74,9 @@ class AsyncQueue {
  public:
   using Milliseconds = internal::Milliseconds;
   using Operation = internal::Operation;
-  using ExecutorT = internal::Executor<TimerId>;
 
   explicit AsyncQueue(
-      std::unique_ptr<ExecutorT> executor);
+      std::unique_ptr<internal::Executor> executor);
 
   void VerifyIsAsyncCall() const;
   void VerifyCalledFromOperation() const;
@@ -91,18 +90,16 @@ class AsyncQueue {
   void StartExecution(const Operation& operation);
 
   void EnqueueBlocking(const Operation& operation);
-  bool IsScheduled(const TimerId timer_id) const;
-  void RunScheduledOperationsUntil(const TimerId last_timer_id);
+  bool IsScheduled(TimerId timer_id) const;
+  void RunScheduledOperationsUntil(TimerId last_timer_id);
 
  private:
-  using TaggedOperationT = internal::TaggedOperation<TimerId>;
-
   Operation Wrap(const Operation& operation);
 
   void VerifySequentialOrder() const;
 
   std::atomic<bool> is_operation_in_progress_;
-  std::unique_ptr<ExecutorT> executor_;
+  std::unique_ptr<internal::Executor> executor_;
 };
 
 }  // namespace util
