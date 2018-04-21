@@ -92,19 +92,18 @@ class DelayedOperation {
   DelayedOperation() {
   }
 
-  void Cancel();
+  void Cancel() {
+    cancel_();
+  }
 
  private:
   // Don't allow callers to create their own valid `DelayedOperation`s.
   friend class SerialQueue;
-  DelayedOperation(
-      const SerialQueue* const queue,
-      internal::ScheduledOperation<internal::TaggedOperation>* const operation)
-      : queue_{queue}, operation_{operation} {
+  explicit DelayedOperation(std::function<void()>&& cancel)
+      : cancel_{std::move(cancel)} {
   }
 
-  const SerialQueue* queue_{};
-  internal::ScheduledOperation<internal::TaggedOperation>* operation_{};
+  std::function<void()> cancel_;
 };
 
 class SerialQueue {
@@ -169,7 +168,7 @@ class SerialQueue {
     internal::TaggedOperation tagged_operation{timer_id, Wrap(operation)};
     const auto operation_impl =
         executor_->ScheduleExecution(delay, std::move(tagged_operation));
-    return DelayedOperation{this, operation_impl};
+    return DelayedOperation{[this, operation_impl] { Cancel(operation_impl); }};
   }
 
   void VerifyIsAsyncCall() const {
@@ -198,10 +197,10 @@ class SerialQueue {
   }
 
  private:
-  friend class DelayedOperation;
-  void Cancel(const DelayedOperation& to_cancel) {
+  void Cancel(const internal::ScheduledOperation<internal::TaggedOperation>*
+                  to_cancel) {
     VerifyIsAsyncCall();
-    executor_->RemoveFromSchedule(&to_cancel);
+    executor_->RemoveFromSchedule(to_cancel);
   }
 
   Operation Wrap(const Operation& operation) {
@@ -221,33 +220,9 @@ class SerialQueue {
   std::unique_ptr<internal::Executor<internal::TaggedOperation>> executor_;
 };
 
-void DelayedOperation::Cancel() {
-  queue_->RemoveFromSchedule(*operation_);
-}
-
 }  // namespace util
 }  // namespace firestore
 }  // namespace firebase
-
-// class TestInterface {
-//  public:
-//   explicit TestInterface(SerialQueue* const queue) : queue_{*queue} {
-//   }
-//   void EnqueueBlocking(const Operation& operation) {
-//     queue_.VerifySequentialOrder();
-//     queue_.executor_->EnqueueBlocking(
-//         [this, operation] { StartExecution(operation); });
-//   }
-
-//     bool ContainsDelayedOperation(TimerId timer_id) const;
-//     void RunDelayedOperationsUntil(TimerId last_timer_id);
-
-//    private:
-//     SerialQueue& queue_;
-//   };
-//   TestInterface TestOnly() const {
-//     return TestInterface{this};
-//   }
 
 // TODO
 // dispatch_queue_t dispatch_queue() const;

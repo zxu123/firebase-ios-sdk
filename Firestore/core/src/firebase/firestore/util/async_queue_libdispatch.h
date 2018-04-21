@@ -59,9 +59,11 @@ class ScheduledOperation {
   }
 
   void Cancel();
-  Callable callable() const { return callable_; }
 
-  void RescheduleAsap();
+  Callable Unschedule() {
+    RemoveFromSchedule();
+    return std::move(callable_);
+  }
 
   bool operator<(const ScheduledOperation& rhs) const {
     return target_time_ < rhs.target_time_;
@@ -85,7 +87,7 @@ class ScheduledOperation {
 
   Executor<Callable>* const executor_;
   const TimePoint target_time_;  // Used for sorting
-  const Callable callable_;
+  Callable callable_;
 
   // True if the operation has either been run or canceled.
   //
@@ -95,7 +97,7 @@ class ScheduledOperation {
   bool done_ = false;
 };
 
-// Executor
+// Wrappers
 
 // Generic wrapper over dispatch_async_f, providing dispatch_async-like
 // interface: accepts an arbitrary invocable object in place of an Objective-C
@@ -127,6 +129,8 @@ void DispatchSync(const dispatch_queue_t queue, Work&& work) {
   });
 }
 
+// Executor
+
 template <typename Callable>
 class Executor {
  public:
@@ -143,7 +147,7 @@ class Executor {
     // they try to access `Executor` after it gets destroyed.
     ExecuteBlocking([this] {
       while (!schedule_.empty()) {
-        RemoveFromSchedule(*schedule_.back());
+        RemoveFromSchedule(schedule_.back());
       }
     });
   }
@@ -188,11 +192,11 @@ class Executor {
     return delayed_operation;
   }
 
-  void RemoveFromSchedule(const ScheduledOperation<Callable>& to_remove) {
+  void RemoveFromSchedule(const ScheduledOperation<Callable>* const to_remove) {
     const auto found =
         std::find_if(schedule_.begin(), schedule_.end(),
-                     [&to_remove](const ScheduledOperation<Callable>* op) {
-                       return op == &to_remove;
+                     [to_remove](const ScheduledOperation<Callable>* op) {
+                       return op == to_remove;
                      });
     // It's possible for the operation to be missing if libdispatch gets to run
     // it after it was force-run, for example.
@@ -220,11 +224,8 @@ class Executor {
         schedule_.begin(), schedule_.end(),
         [](const ScheduledOperation<Callable>* lhs,
            const ScheduledOperation<Callable>* rhs) { return *lhs < *rhs; });
-    const auto operation = schedule_.begin();
-    Callable result = (*operation)->callable();
-    (*operation)->MarkDone();
-    schedule_.erase(operation);
-    return result;
+    const auto nearest = schedule_.begin();
+    return (*nearest)->Unschedule();
   }
 
  private:
@@ -257,12 +258,6 @@ void ScheduledOperation<Callable>::Cancel() {
 }
 
 template <typename Callable>
-void ScheduledOperation<Callable>::RescheduleAsap() {
-  FIREBASE_ASSERT_MESSAGE(!done_, "TODO");
-  executor_->Execute([this] { Execute(); });
-}
-
-template <typename Callable>
 void ScheduledOperation<Callable>::InvokedByLibdispatch(void* const raw_self) {
   auto const self = static_cast<ScheduledOperation*>(raw_self);
   self->Execute();
@@ -284,7 +279,7 @@ void ScheduledOperation<Callable>::Execute() {
 
 template <typename Callable>
 void ScheduledOperation<Callable>::RemoveFromSchedule() {
-  executor_->RemoveFromSchedule(*this);
+  executor_->RemoveFromSchedule(this);
 }
 
 }  // namespace internal
