@@ -34,8 +34,6 @@ namespace util {
 
 namespace internal {
 
-using Func = std::function<void()>;
-
 // Wrappers
 
 // Generic wrapper over dispatch_async_f, providing dispatch_async-like
@@ -43,6 +41,8 @@ using Func = std::function<void()>;
 // block.
 template <typename Work>
 void DispatchAsync(const dispatch_queue_t queue, Work&& work) {
+  using Func = std::function<void()>;
+
   // Wrap the passed invocable object into a std::function. It's dynamically
   // allocated to make sure the object is valid by the time libdispatch gets to
   // it.
@@ -58,6 +58,8 @@ void DispatchAsync(const dispatch_queue_t queue, Work&& work) {
 // Similar to DispatchAsync but wraps dispatch_sync_f.
 template <typename Work>
 void DispatchSync(const dispatch_queue_t queue, Work&& work) {
+  using Func = std::function<void()>;
+
   // Unlike dispatch_async_f, dispatch_sync_f blocks until the work passed to it
   // is done, so passing a pointer to a local variable is okay.
   Func wrap{std::forward<Work>(work)};

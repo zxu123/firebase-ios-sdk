@@ -270,16 +270,18 @@ class ExecutorStd : public Executor {
     }
     Entry(Operation&& operation,
           const ExecutorStd::Id id,
-          const ExecutorStd::Tag tag)
+          const ExecutorStd::Tag tag = ImmediateTag)
         : operation{std::move(operation)}, id{id}, tag{tag} {
     }
+
     bool IsImmediate() const {
-      return tag == -1;
+      return tag == ImmediateTag;
     }
 
     Operation operation;
     Id id = 0;
-    Tag tag = -1;
+    static constexpr Tag ImmediateTag = -1;
+    Tag tag = ImmediateTag;
   };
   // Operations scheduled for immediate execution are also put on the schedule
   // (with due time set to `Immediate`).

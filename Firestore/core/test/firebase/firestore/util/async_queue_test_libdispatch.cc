@@ -40,7 +40,6 @@ const auto kTimeout = std::chrono::seconds(5);
 
 // using ExecutorT = internal::ExecutorLibdispatch;
 using ExecutorT = internal::ExecutorStd;
-using internal::TaggedOperation;
 
 class AsyncQueueTest : public ::testing::Test {
  public:

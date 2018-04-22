@@ -37,16 +37,16 @@ absl::string_view StringViewFromDispatchLabel(const char* const label) {
 class TimeSlot {
  public:
   TimeSlot(ExecutorLibdispatch* executor,
-           Milliseconds delay,
-           TaggedOperation&& operation);
+           Executor::Milliseconds delay,
+           Executor::TaggedOperation&& operation);
 
   void Cancel();
-  TaggedOperation Unschedule();
+  Executor::TaggedOperation Unschedule();
 
   bool operator<(const TimeSlot& rhs) const {
     return target_time_ < rhs.target_time_;
   }
-  bool operator==(const internal::TaggedOperation::Tag tag) const {
+  bool operator==(const Executor::Tag tag) const {
     return operation_.tag == tag;
   }
 
@@ -61,11 +61,11 @@ class TimeSlot {
   void RemoveFromSchedule();
 
   using TimePoint =
-      std::chrono::time_point<std::chrono::system_clock, Milliseconds>;
+      std::chrono::time_point<std::chrono::system_clock, Executor::Milliseconds>;
 
   ExecutorLibdispatch* const executor_;
   const TimePoint target_time_;  // Used for sorting
-  TaggedOperation operation_;
+  Executor::TaggedOperation operation_;
 
   // True if the operation has either been run or canceled.
   //
@@ -76,10 +76,10 @@ class TimeSlot {
 };
 
 TimeSlot::TimeSlot(ExecutorLibdispatch* const executor,
-                   const Milliseconds delay,
-                   TaggedOperation&& operation)
+                   const Executor::Milliseconds delay,
+                   Executor::TaggedOperation&& operation)
     : executor_{executor},
-      target_time_{std::chrono::time_point_cast<Milliseconds>(
+      target_time_{std::chrono::time_point_cast<Executor::Milliseconds>(
                        std::chrono::system_clock::now()) +
                    delay},
       operation_{std::move(operation)} {
@@ -91,7 +91,7 @@ void TimeSlot::Cancel() {
   }
 }
 
-TaggedOperation TimeSlot::Unschedule() {
+Executor::TaggedOperation TimeSlot::Unschedule() {
   RemoveFromSchedule();
   return std::move(operation_);
 }
@@ -219,7 +219,7 @@ bool ExecutorLibdispatch::IsScheduleEmpty() const {
   return schedule_.empty();
 }
 
-TaggedOperation ExecutorLibdispatch::PopFromSchedule() {
+Executor::TaggedOperation ExecutorLibdispatch::PopFromSchedule() {
   // Sorting upon each call to `PopFromSchedule` is inefficient, which is
   // consciously ignored. One alternative is to keep `schedule_` sorted, which
   // would impose a performance penalty, however small, on the normal code paths

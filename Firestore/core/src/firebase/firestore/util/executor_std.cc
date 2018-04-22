@@ -101,7 +101,7 @@ void ExecutorStd::UnblockQueue() {
   // Put a no-op for immediate execution on the queue to ensure that
   // `schedule_.PopBlocking` returns, and worker thread can notice that shutdown
   // is in progress.
-  schedule_.Push(Entry{[] {}, /*id=*/0, /*tag=*/-1}, Immediate());
+  schedule_.Push(Entry{[] {}, /*id=*/0}, Immediate());
 }
 
 ExecutorStd::Id ExecutorStd::NextId() {
@@ -137,7 +137,7 @@ bool ExecutorStd::IsScheduleEmpty() const {
   return schedule_.empty();
 }
 
-TaggedOperation ExecutorStd::PopFromSchedule() {
+Executor::TaggedOperation ExecutorStd::PopFromSchedule() {
   Entry removed;
   const bool success = schedule_.RemoveIf(
       &removed, [](const Entry& e) { return !e.IsImmediate(); });

@@ -58,8 +58,8 @@ enum class TimerId {
 
 class AsyncQueue {
  public:
-  using Milliseconds = internal::Milliseconds;
-  using Operation = internal::Operation;
+  using Milliseconds = internal::Executor::Milliseconds;
+  using Operation = internal::Executor::Operation;
 
   explicit AsyncQueue(std::unique_ptr<internal::Executor> executor);
 

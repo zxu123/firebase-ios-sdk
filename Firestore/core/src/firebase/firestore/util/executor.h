@@ -43,18 +43,16 @@ class DelayedOperation {
 
 namespace internal {
 
-using Operation = std::function<void()>;
-using Milliseconds = std::chrono::milliseconds;
-
-struct TaggedOperation {
-  using Tag = int;
-  Tag tag{};
-  Operation operation;
-};
-
 class Executor {
  public:
-  using Tag = TaggedOperation::Tag;
+  using Tag = int;
+  using Operation = std::function<void()>;
+  using Milliseconds = std::chrono::milliseconds;
+
+  struct TaggedOperation {
+    Tag tag{};
+    Operation operation;
+  };
 
   virtual ~Executor() {
   }

@@ -23,7 +23,9 @@ namespace firebase {
 namespace firestore {
 namespace util {
 
-AsyncQueue::AsyncQueue(std::unique_ptr<internal::Executor> executor)
+using internal::Executor;
+
+AsyncQueue::AsyncQueue(std::unique_ptr<Executor> executor)
     : executor_{std::move(executor)} {
   is_operation_in_progress_ = false;
 }
@@ -77,7 +79,7 @@ DelayedOperation AsyncQueue::EnqueueAfterDelay(Milliseconds delay,
       !IsScheduled(timer_id),
       "Attempted to schedule multiple operations with id %d", timer_id);
 
-  internal::TaggedOperation tagged{static_cast<int>(timer_id), Wrap(operation)};
+  Executor::TaggedOperation tagged{static_cast<int>(timer_id), Wrap(operation)};
   return executor_->ScheduleExecution(delay, std::move(tagged));
 }
 
@@ -94,7 +96,7 @@ void AsyncQueue::RunScheduledOperationsUntil(const TimerId last_timer_id) {
         last_timer_id == TimerId::All || IsScheduled(last_timer_id), "TODO 3");
     FIREBASE_ASSERT_MESSAGE(!executor_->IsScheduleEmpty(), "TODO 4");
 
-    internal::TaggedOperation tagged;
+    Executor::TaggedOperation tagged;
     do {
       tagged = executor_->PopFromSchedule();
       tagged.operation();
