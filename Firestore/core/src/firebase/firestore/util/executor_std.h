@@ -46,14 +46,13 @@ namespace internal {
 // The details of time management are completely concealed within the class.
 // Once an entry is scheduled, there is no way to reschedule or even retrieve
 // the time.
-template <typename T, typename DurationT = std::chrono::system_clock::duration>
+template <typename T, typename Duration = std::chrono::system_clock::duration>
 class Schedule {
   // Internal invariants:
   // - entries are always in sorted order, leftmost entry is always the most
   //   due;
   // - each operation modifying the queue notifies the condition variable `cv_`.
  public:
-  using Duration = DurationT;
   // Entries are scheduled using absolute time.
   using TimePoint =
       std::chrono::time_point<std::chrono::system_clock, Duration>;
@@ -134,6 +133,7 @@ class Schedule {
   template <typename Pred>
   bool RemoveIf(T* const out, const Pred pred) {
     std::lock_guard<std::mutex> lock{mutex_};
+
     const auto found =
         std::find_if(scheduled_.begin(), scheduled_.end(),
                      [&pred](const Entry& s) { return pred(s.value); });
@@ -147,6 +147,7 @@ class Schedule {
   template <typename Pred>
   bool Contains(const Pred pred) const {
     std::lock_guard<std::mutex> lock{mutex_};
+
     // While this logically duplicates part of the implementation of `RemoveIf`,
     // a helper function would need two overloads, const and non-const,
     // eliminating any gains in brevity.
@@ -216,18 +217,14 @@ class Schedule {
 // Delayed operations may be canceled if they have not already been run.
 class ExecutorStd : public Executor {
  public:
-  using Operation = std::function<void()>;
-  using Milliseconds = std::chrono::milliseconds;
-
- public:
   ExecutorStd();
   ~ExecutorStd();
 
-  // Executes the `operation` for immediate execution on the background thread.
+  // Schedules the `operation` for immediate execution on the background thread.
   void Execute(Operation&& operation) override;
   void ExecuteBlocking(Operation&& operation) override;
 
-  // Executes the `operation` for execution on the background thread once the
+  // Schedules the `operation` for execution on the background thread once the
   // `delay` from now (according to the system clock) has passed. Returns
   // a handle which allows to cancel the delayed operation.
   //

@@ -23,6 +23,15 @@ namespace firestore {
 namespace util {
 namespace internal {
 
+namespace {
+
+std::string PrintThreadId(const std::thread::id thread_id) {
+  const auto hashed = std::hash<std::thread::id>{}(thread_id);
+  return std::to_string(hashed);
+}
+
+}  // namespace
+
 ExecutorStd::ExecutorStd() {
   // Somewhat counter-intuitively, constructor of `std::atomic` assigns the
   // value non-atomically, so the atomic initialization must be provided here,
@@ -102,15 +111,6 @@ ExecutorStd::Id ExecutorStd::NextId() {
   // that is old enough to cause a conflict.
   return current_id_++;
 }
-
-namespace {
-
-std::string PrintThreadId(const std::thread::id thread_id) {
-  const auto hashed = std::hash<std::thread::id>{}(thread_id);
-  return std::to_string(hashed);
-}
-
-}  // namespace
 
 bool ExecutorStd::IsAsyncCall() const {
   return GetInvokerId() == PrintThreadId(worker_thread_.get_id());

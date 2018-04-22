@@ -130,7 +130,10 @@ ExecutorLibdispatch::ExecutorLibdispatch()
 
 ExecutorLibdispatch::~ExecutorLibdispatch() {
   // Turn any operations that might still be in the queue into no-ops, lest
-  // they try to access `ExecutorLibdispatch` after it gets destroyed.
+  // they try to access `ExecutorLibdispatch` after it gets destroyed. Because
+  // the queue is serial, by the time libdispatch gets to the newly-enqueued
+  // work, the pending operations that might have been in progress would have
+  // already finished.
   ExecuteBlocking([this] {
     while (!schedule_.empty()) {
       RemoveFromSchedule(schedule_.back());
@@ -153,7 +156,7 @@ void ExecutorLibdispatch::ExecuteBlocking(Operation&& operation) {
 }
 
 DelayedOperation ExecutorLibdispatch::ScheduleExecution(
-    Milliseconds delay, TaggedOperation&& operation) {
+    const Milliseconds delay, TaggedOperation&& operation) {
   namespace chr = std::chrono;
   const dispatch_time_t delay_ns = dispatch_time(
       DISPATCH_TIME_NOW, chr::duration_cast<chr::nanoseconds>(delay).count());
@@ -189,25 +192,6 @@ void ExecutorLibdispatch::RemoveFromSchedule(const TimeSlot* const to_remove) {
   }
 }
 
-bool ExecutorLibdispatch::IsScheduled(const Tag tag) const {
-  return std::find_if(schedule_.begin(), schedule_.end(),
-                      [&tag](const TimeSlot* const operation) {
-                        return *operation == tag;
-                      }) != schedule_.end();
-}
-
-bool ExecutorLibdispatch::IsScheduleEmpty() const {
-  return schedule_.empty();
-}
-
-TaggedOperation ExecutorLibdispatch::PopFromSchedule() {
-  std::sort(
-      schedule_.begin(), schedule_.end(),
-      [](const TimeSlot* lhs, const TimeSlot* rhs) { return *lhs < *rhs; });
-  const auto nearest = schedule_.begin();
-  return (*nearest)->Unschedule();
-}
-
 // GetLabel functions are guaranteed to never return a "null" string_view
 // (i.e. data() != nullptr).
 absl::string_view ExecutorLibdispatch::GetCurrentQueueLabel() const {
@@ -220,6 +204,32 @@ absl::string_view ExecutorLibdispatch::GetCurrentQueueLabel() const {
 absl::string_view ExecutorLibdispatch::GetTargetQueueLabel() const {
   return StringViewFromDispatchLabel(
       dispatch_queue_get_label(dispatch_queue()));
+}
+
+// Test-only methods
+
+bool ExecutorLibdispatch::IsScheduled(const Tag tag) const {
+  return std::find_if(schedule_.begin(), schedule_.end(),
+                      [&tag](const TimeSlot* const operation) {
+                        return *operation == tag;
+                      }) != schedule_.end();
+}
+
+bool ExecutorLibdispatch::IsScheduleEmpty() const {
+  return schedule_.empty();
+}
+
+TaggedOperation ExecutorLibdispatch::PopFromSchedule() {
+  // Sorting upon each call to `PopFromSchedule` is inefficient, which is
+  // consciously ignored. One alternative is to keep `schedule_` sorted, which
+  // would impose a performance penalty, however small, on the normal code paths
+  // in favor of test-only paths. The other is to expose yet another test-only
+  // method for sorting, unnecessarily bloating the test-only interface.
+  std::sort(
+      schedule_.begin(), schedule_.end(),
+      [](const TimeSlot* lhs, const TimeSlot* rhs) { return *lhs < *rhs; });
+  const auto nearest = schedule_.begin();
+  return (*nearest)->Unschedule();
 }
 
 }  // namespace internal

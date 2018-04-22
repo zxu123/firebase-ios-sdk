@@ -33,7 +33,7 @@ void AsyncQueue::VerifyIsAsyncCall() const {
 }
 
 void AsyncQueue::VerifyCalledFromOperation() const {
-  VerifyIsAsyncCall();  // EnsureAsync().VerifyCalledFromOperation?
+  VerifyIsAsyncCall();
   FIREBASE_ASSERT_MESSAGE(is_operation_in_progress_,
                           "VerifyCalledFromOperation called when no "
                           "operation is executing (invoker id: '%s')",
@@ -93,6 +93,7 @@ void AsyncQueue::RunScheduledOperationsUntil(const TimerId last_timer_id) {
     FIREBASE_ASSERT_MESSAGE(
         last_timer_id == TimerId::All || IsScheduled(last_timer_id), "TODO 3");
     FIREBASE_ASSERT_MESSAGE(!executor_->IsScheduleEmpty(), "TODO 4");
+
     internal::TaggedOperation tagged;
     do {
       tagged = executor_->PopFromSchedule();
