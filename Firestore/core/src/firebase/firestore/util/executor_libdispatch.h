@@ -32,68 +32,9 @@ namespace firebase {
 namespace firestore {
 namespace util {
 
-absl::string_view StringViewFromLabel(const char* const label) {
-  // Make sure string_view's data is not null, because it's used for logging.
-  return label ? absl::string_view{label} : absl::string_view{""};
-}
-
 namespace internal {
 
-class ExecutorLibdispatch;
 using Func = std::function<void()>;
-
-// All member functions, including the constructor, are *only* invoked on the
-// Firestore queue. The only exception is `operator<`.
-class TimeSlot {
- public:
-  TimeSlot(ExecutorLibdispatch* const executor,
-           const Milliseconds delay,
-           TaggedOperation&& operation)
-      : executor_{executor},
-        target_time_{std::chrono::time_point_cast<Milliseconds>(
-                         std::chrono::system_clock::now()) +
-                     delay},
-        operation_{std::move(operation)} {
-  }
-
-  void Cancel();
-
-  TaggedOperation Unschedule() {
-    RemoveFromSchedule();
-    return std::move(operation_);
-  }
-
-  bool operator<(const TimeSlot& rhs) const {
-    return target_time_ < rhs.target_time_;
-  }
-  bool operator==(const internal::TaggedOperation::Tag tag) const {
-    return operation_.tag == tag;
-  }
-
-  void MarkDone() {
-    done_ = true;
-  }
-
-  static void InvokedByLibdispatch(void* const raw_self);
-
- private:
-  void Execute();
-  void RemoveFromSchedule();
-
-  using TimePoint =
-      std::chrono::time_point<std::chrono::system_clock, Milliseconds>;
-
-  ExecutorLibdispatch* const executor_;
-  const TimePoint target_time_;  // Used for sorting
-  TaggedOperation operation_;
-
-  // True if the operation has either been run or canceled.
-  //
-  // Note on thread-safety: `done_` is only ever accessed from `Cancel` and
-  // `Execute` member functions, and both of them are only ever invoked by the
-  // dispatch queue, which provides synchronization.
-  bool done_ = false;
-};
 
 // Wrappers
 
@@ -107,8 +48,8 @@ void DispatchAsync(const dispatch_queue_t queue, Work&& work) {
   // it.
   const auto wrap = new Func(std::forward<Work>(work));
 
-  dispatch_async_f(queue, wrap, [](void* const raw_operation) {
-    const auto unwrap = static_cast<Func*>(raw_operation);
+  dispatch_async_f(queue, wrap, [](void* const raw_work) {
+    const auto unwrap = static_cast<Func*>(raw_work);
     (*unwrap)();
     delete unwrap;
   });
@@ -121,104 +62,35 @@ void DispatchSync(const dispatch_queue_t queue, Work&& work) {
   // is done, so passing a pointer to a local variable is okay.
   Func wrap{std::forward<Work>(work)};
 
-  dispatch_sync_f(queue, &wrap, [](void* const raw_operation) {
-    const auto unwrap = static_cast<Func*>(raw_operation);
+  dispatch_sync_f(queue, &wrap, [](void* const raw_work) {
+    const auto unwrap = static_cast<Func*>(raw_work);
     (*unwrap)();
   });
 }
 
 // Executor
 
+class TimeSlot;
+
 class ExecutorLibdispatch : public Executor {
  public:
-  explicit ExecutorLibdispatch(const dispatch_queue_t dispatch_queue)
-      : dispatch_queue_{dispatch_queue} {
-  }
-  ExecutorLibdispatch()
-      : ExecutorLibdispatch{dispatch_queue_create(
-            "com.google.firebase.firestore", DISPATCH_QUEUE_SERIAL)} {
-  }
+  ExecutorLibdispatch();
+  explicit ExecutorLibdispatch(const dispatch_queue_t dispatch_queue);
+  ~ExecutorLibdispatch();
 
-  ~ExecutorLibdispatch() {
-    // Turn any operations that might still be in the queue into no-ops, lest
-    // they try to access `ExecutorLibdispatch` after it gets destroyed.
-    ExecuteBlocking([this] {
-      while (!schedule_.empty()) {
-        RemoveFromSchedule(schedule_.back());
-      }
-    });
-  }
+  bool IsAsyncCall() const override;
+  std::string GetInvokerId() const override;
 
-  bool IsAsyncCall() const override {
-    return GetCurrentQueueLabel().data() == GetTargetQueueLabel().data();
-  }
-  std::string GetInvokerId() const override {
-    return GetCurrentQueueLabel().data();
-  }
-
-  void Execute(Operation&& operation) override {
-    DispatchAsync(dispatch_queue(), std::move(operation));
-  }
-  void ExecuteBlocking(Operation&& operation) override {
-    DispatchSync(dispatch_queue(), std::move(operation));
-  }
-
+  void Execute(Operation&& operation) override;
+  void ExecuteBlocking(Operation&& operation) override;
   DelayedOperation ScheduleExecution(Milliseconds delay,
-                                     TaggedOperation&& operation) override {
-    namespace chr = std::chrono;
-    const dispatch_time_t delay_ns = dispatch_time(
-        DISPATCH_TIME_NOW, chr::duration_cast<chr::nanoseconds>(delay).count());
+                                     TaggedOperation&& operation) override;
 
-    // Ownership is fully transferred to libdispatch -- because it's impossible
-    // to truly cancel work after it's been dispatched, libdispatch is
-    // guaranteed to outlive Executor, and it's possible for work to be invoked
-    // by libdispatch after Executor is destroyed. Executor only stores an
-    // observer pointer to the operation.
-    //
-    // Invariant: if Executor contains the plain pointer to an operation, it
-    // hasn't been run or canceled yet. When libdispatch invokes the operation,
-    // it will remove the operation from Executor, and since it happens inside
-    // `dispatch` invocation, it happens-before any access from Executor to
-    // `schedule_`.
+  void RemoveFromSchedule(const TimeSlot* to_remove);
 
-    auto const time_slot = new TimeSlot{this, delay, std::move(operation)};
-    dispatch_after_f(delay_ns, dispatch_queue(), time_slot,
-                     TimeSlot::InvokedByLibdispatch);
-    schedule_.push_back(time_slot);
-    return DelayedOperation{
-        [this, time_slot] { RemoveFromSchedule(time_slot); }};
-  }
-
-  void RemoveFromSchedule(const TimeSlot* const to_remove) {
-    const auto found = std::find_if(
-        schedule_.begin(), schedule_.end(),
-        [to_remove](const TimeSlot* op) { return op == to_remove; });
-    // It's possible for the operation to be missing if libdispatch gets to run
-    // it after it was force-run, for example.
-    if (found != schedule_.end()) {
-      (*found)->MarkDone();
-      schedule_.erase(found);
-    }
-  }
-
-  bool IsScheduled(const Tag tag) const override {
-    return std::find_if(schedule_.begin(), schedule_.end(),
-                        [&tag](const TimeSlot* const operation) {
-                          return *operation == tag;
-                        }) != schedule_.end();
-  }
-
-  bool IsScheduleEmpty() const override {
-    return schedule_.empty();
-  }
-
-  TaggedOperation PopFromSchedule() override {
-    std::sort(
-        schedule_.begin(), schedule_.end(),
-        [](const TimeSlot* lhs, const TimeSlot* rhs) { return *lhs < *rhs; });
-    const auto nearest = schedule_.begin();
-    return (*nearest)->Unschedule();
-  }
+  bool IsScheduled(Tag tag) const override;
+  bool IsScheduleEmpty() const override;
+  TaggedOperation PopFromSchedule() override;
 
  private:
   dispatch_queue_t dispatch_queue() const {
@@ -227,48 +99,12 @@ class ExecutorLibdispatch : public Executor {
 
   // GetLabel functions are guaranteed to never return a "null" string_view
   // (i.e. data() != nullptr).
-  absl::string_view GetCurrentQueueLabel() const {
-    // Note: dispatch_queue_get_label may return nullptr if the queue wasn't
-    // initialized with a label.
-    return StringViewFromLabel(
-        dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
-  }
-
-  absl::string_view GetTargetQueueLabel() const {
-    return StringViewFromLabel(dispatch_queue_get_label(dispatch_queue()));
-  }
+  absl::string_view GetCurrentQueueLabel() const;
+  absl::string_view GetTargetQueueLabel() const;
 
   std::atomic<dispatch_queue_t> dispatch_queue_;
   std::vector<TimeSlot*> schedule_;
 };
-
-void TimeSlot::Cancel() {
-  if (!done_) {
-    RemoveFromSchedule();
-  }
-}
-
-void TimeSlot::InvokedByLibdispatch(void* const raw_self) {
-  auto const self = static_cast<TimeSlot*>(raw_self);
-  self->Execute();
-  delete self;
-}
-
-void TimeSlot::Execute() {
-  if (done_) {
-    return;
-  }
-
-  RemoveFromSchedule();
-
-  FIREBASE_ASSERT_MESSAGE(operation_.operation,
-                          "TimeSlot contains an invalid function object");
-  operation_.operation();
-}
-
-void TimeSlot::RemoveFromSchedule() {
-  executor_->RemoveFromSchedule(this);
-}
 
 }  // namespace internal
 }  // namespace util
