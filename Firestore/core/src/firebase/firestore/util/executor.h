@@ -51,6 +51,15 @@ namespace internal {
 
 // An interface to a platform-specific executor of asynchronous tasks
 // ("operations").
+//
+// Operations may be scheduled for immediate or delayed execution. Operations
+// scheduled for the exact same time are FIFO ordered. Immediate operations
+// always come before delayed operations.
+//
+// The operations are executed sequentially; only a single operation is executed
+// at any given time.
+//
+// Delayed operations may be canceled if they have not already been run.
 class Executor {
  public:
   using Tag = int;

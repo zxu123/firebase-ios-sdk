@@ -34,9 +34,7 @@ namespace util {
 
 namespace internal {
 
-// Wrappers
-
-// Generic wrapper over dispatch_async_f, providing dispatch_async-like
+// Generic wrapper over `dispatch_async_f`, providing `dispatch_async`-like
 // interface: accepts an arbitrary invocable object in place of an Objective-C
 // block.
 template <typename Work>
@@ -55,7 +53,7 @@ void DispatchAsync(const dispatch_queue_t queue, Work&& work) {
   });
 }
 
-// Similar to DispatchAsync but wraps dispatch_sync_f.
+// Similar to `DispatchAsync` but wraps `dispatch_sync_f`.
 template <typename Work>
 void DispatchSync(const dispatch_queue_t queue, Work&& work) {
   using Func = std::function<void()>;
@@ -70,14 +68,14 @@ void DispatchSync(const dispatch_queue_t queue, Work&& work) {
   });
 }
 
-// Executor
-
 class TimeSlot;
 
+// A serial queue built on top of libdispatch. The operations are run on
+// a dedicated serial dispatch queue.
 class ExecutorLibdispatch : public Executor {
  public:
   ExecutorLibdispatch();
-  explicit ExecutorLibdispatch(const dispatch_queue_t dispatch_queue);
+  explicit ExecutorLibdispatch(dispatch_queue_t dispatch_queue);
   ~ExecutorLibdispatch();
 
   bool IsAsyncCall() const override;
@@ -105,6 +103,8 @@ class ExecutorLibdispatch : public Executor {
   absl::string_view GetTargetQueueLabel() const;
 
   std::atomic<dispatch_queue_t> dispatch_queue_;
+  // Stores non-owned pointers to `TimeSlot`s.
+  // Invariant: if a `TimeSlot` is in `schedule_`, it's a valid pointer.
   std::vector<TimeSlot*> schedule_;
 };
 

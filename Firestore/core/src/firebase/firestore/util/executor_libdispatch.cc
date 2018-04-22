@@ -30,24 +30,43 @@ absl::string_view StringViewFromDispatchLabel(const char* const label) {
 
 }  // namespace
 
-// TimeSlot
+// Represents a "busy" time slot on the schedule.
+//
+// Since libdispatch doesn't provide a way to cancel a scheduled operation, once
+// a slot is created, it will always stay in the schedule until the time is
+// past. Consequently, it is more useful to think of a time slot than
+// a particular scheduled operation -- by the time the slot comes, operation may 
+// or may not be there (imagine getting to a meeting and finding out it's been
+// canceled).
+//
+// Precondition: all member functions, including the constructor, are *only*
+// invoked on the Firestore queue.
+//
+//   Ownership:
+//
+// - `TimeSlot` is exclusively owned by libdispatch;
+// - `ExecutorLibdispatch` contains non-owning pointers to `TimeSlot`s;
+// - invariant: if the executor contains a pointer to a `TimeSlot`, it is
+//   a valid object. It is achieved because when libdispatch invokes
+//   a `TimeSlot`, it always removes it from the executor before deleting it.
+//   The reverse is not true: a canceled time slot is removed from the executor,
+//   but won't be destroyed until its original due time is past.
 
-// All member functions, including the constructor, are *only* invoked on the
-// Firestore queue. The only exception is `operator<`.
 class TimeSlot {
  public:
   TimeSlot(ExecutorLibdispatch* executor,
            Executor::Milliseconds delay,
            Executor::TaggedOperation&& operation);
 
-  void Cancel();
+  // Returns the operation that was scheduled for this time slot and turns the
+  // slot into a no-op.
   Executor::TaggedOperation Unschedule();
 
   bool operator<(const TimeSlot& rhs) const {
     return target_time_ < rhs.target_time_;
   }
   bool operator==(const Executor::Tag tag) const {
-    return operation_.tag == tag;
+    return tagged_.tag == tag;
   }
 
   void MarkDone() {
@@ -65,7 +84,7 @@ class TimeSlot {
 
   ExecutorLibdispatch* const executor_;
   const TimePoint target_time_;  // Used for sorting
-  Executor::TaggedOperation operation_;
+  Executor::TaggedOperation tagged_;
 
   // True if the operation has either been run or canceled.
   //
@@ -82,18 +101,14 @@ TimeSlot::TimeSlot(ExecutorLibdispatch* const executor,
       target_time_{std::chrono::time_point_cast<Executor::Milliseconds>(
                        std::chrono::system_clock::now()) +
                    delay},
-      operation_{std::move(operation)} {
-}
-
-void TimeSlot::Cancel() {
-  if (!done_) {
-    RemoveFromSchedule();
-  }
+      tagged_{std::move(operation)} {
 }
 
 Executor::TaggedOperation TimeSlot::Unschedule() {
-  RemoveFromSchedule();
-  return std::move(operation_);
+  if (!done_) {
+    RemoveFromSchedule();
+  }
+  return std::move(tagged_);
 }
 
 void TimeSlot::InvokedByLibdispatch(void* const raw_self) {
@@ -109,9 +124,9 @@ void TimeSlot::Execute() {
 
   RemoveFromSchedule();
 
-  FIREBASE_ASSERT_MESSAGE(operation_.operation,
+  FIREBASE_ASSERT_MESSAGE(tagged_.operation,
                           "TimeSlot contains an invalid function object");
-  operation_.operation();
+  tagged_.operation();
 }
 
 void TimeSlot::RemoveFromSchedule() {
@@ -163,21 +178,20 @@ DelayedOperation ExecutorLibdispatch::ScheduleExecution(
 
   // Ownership is fully transferred to libdispatch -- because it's impossible
   // to truly cancel work after it's been dispatched, libdispatch is
-  // guaranteed to outlive Executor, and it's possible for work to be invoked
-  // by libdispatch after Executor is destroyed. Executor only stores an
-  // observer pointer to the operation.
-  //
-  // Invariant: if Executor contains the plain pointer to an operation, it
-  // hasn't been run or canceled yet. When libdispatch invokes the operation,
-  // it will remove the operation from Executor, and since it happens inside
-  // `dispatch` invocation, it happens-before any access from Executor to
-  // `schedule_`.
+  // guaranteed to outlive the executor, and it's possible for work to be
+  // invoked by libdispatch after the executor is destroyed. Executor only
+  // stores an observer pointer to the operation.
 
   auto const time_slot = new TimeSlot{this, delay, std::move(operation)};
   dispatch_after_f(delay_ns, dispatch_queue(), time_slot,
                    TimeSlot::InvokedByLibdispatch);
   schedule_.push_back(time_slot);
-  return DelayedOperation{[this, time_slot] { RemoveFromSchedule(time_slot); }};
+  return DelayedOperation{[this, time_slot] {
+    // `time_slot` might be destroyed by the time cancellation function runs.
+    // Therefore, don't access any methods on `time_slot`, only use it as
+    // a handle to remove from `schedule_`.
+    RemoveFromSchedule(time_slot);
+  }};
 }
 
 void ExecutorLibdispatch::RemoveFromSchedule(const TimeSlot* const to_remove) {
@@ -224,7 +238,7 @@ Executor::TaggedOperation ExecutorLibdispatch::PopFromSchedule() {
   // consciously ignored. One alternative is to keep `schedule_` sorted, which
   // would impose a performance penalty, however small, on the normal code paths
   // in favor of test-only paths. The other is to expose yet another test-only
-  // method for sorting, unnecessarily bloating the test-only interface.
+  // method for sorting, unnecessarily bloating the interface.
   std::sort(
       schedule_.begin(), schedule_.end(),
       [](const TimeSlot* lhs, const TimeSlot* rhs) { return *lhs < *rhs; });

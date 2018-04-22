@@ -205,15 +205,6 @@ class Schedule {
 
 // A serial queue that executes provided operations on a dedicated background
 // thread, using C++11 standard library functionality.
-//
-// Operations may be scheduled for immediate or delayed execution. Operations
-// scheduled for the exact same time are FIFO ordered. Immediate operations
-// always come before delayed operations.
-//
-// The operations are executed sequentially; only a single operation is executed
-// at any given time.
-//
-// Delayed operations may be canceled if they have not already been run.
 class ExecutorStd : public Executor {
  public:
   ExecutorStd();
