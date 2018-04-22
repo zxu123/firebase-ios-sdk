@@ -16,7 +16,7 @@
 
 #include "Firestore/core/src/firebase/firestore/util/executor_std.h"
 
-#include <future>   // NOLINT(build/c++11)
+#include <future>  // NOLINT(build/c++11)
 
 namespace firebase {
 namespace firestore {
@@ -25,6 +25,8 @@ namespace internal {
 
 namespace {
 
+// The only guarantee is that different `thread_id`s will produce different
+// values.
 std::string PrintThreadId(const std::thread::id thread_id) {
   const auto hashed = std::hash<std::thread::id>{}(thread_id);
   return std::to_string(hashed);
@@ -56,7 +58,7 @@ void ExecutorStd::Execute(Operation&& operation) {
 }
 
 DelayedOperation ExecutorStd::ScheduleExecution(const Milliseconds delay,
-                                                TaggedOperation&& operation) {
+                                                TaggedOperation&& tagged) {
   // While negative delay can be interpreted as a request for immediate
   // execution, supporting it would provide a hacky way to modify FIFO ordering
   // of immediate operations.
@@ -64,10 +66,9 @@ DelayedOperation ExecutorStd::ScheduleExecution(const Milliseconds delay,
                           "ScheduleExecution: delay cannot be negative");
 
   namespace chr = std::chrono;
-
   const auto now = chr::time_point_cast<Milliseconds>(chr::system_clock::now());
   const auto id =
-      DoExecute(std::move(operation.operation), now + delay, operation.tag);
+      DoExecute(std::move(tagged.operation), now + delay, tagged.tag);
 
   return DelayedOperation{[this, id] { TryCancel(id); }};
 }
@@ -130,7 +131,7 @@ void ExecutorStd::ExecuteBlocking(Operation&& operation) {
 }
 
 bool ExecutorStd::IsScheduled(const Tag tag) const {
-  return schedule_.Contains([tag](const Entry& e) { return e.tag == tag; });
+  return schedule_.Contains([&tag](const Entry& e) { return e.tag == tag; });
 }
 
 bool ExecutorStd::IsScheduleEmpty() const {

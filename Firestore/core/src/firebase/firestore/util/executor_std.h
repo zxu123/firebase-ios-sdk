@@ -19,10 +19,8 @@
 
 #include <algorithm>
 #include <atomic>
-#include <chrono>              // NOLINT(build/c++11)
 #include <condition_variable>  // NOLINT(build/c++11)
 #include <deque>
-#include <functional>
 #include <mutex>   // NOLINT(build/c++11)
 #include <thread>  // NOLINT(build/c++11)
 #include <utility>
@@ -144,6 +142,7 @@ class Schedule {
     return false;
   }
 
+  // Checks whether the queue contains an entry satisfying the given predicate.
   template <typename Pred>
   bool Contains(const Pred pred) const {
     std::lock_guard<std::mutex> lock{mutex_};
@@ -205,7 +204,7 @@ class Schedule {
 };
 
 // A serial queue that executes provided operations on a dedicated background
-// thread.
+// thread, using C++11 standard library functionality.
 //
 // Operations may be scheduled for immediate or delayed execution. Operations
 // scheduled for the exact same time are FIFO ordered. Immediate operations
@@ -220,18 +219,11 @@ class ExecutorStd : public Executor {
   ExecutorStd();
   ~ExecutorStd();
 
-  // Schedules the `operation` for immediate execution on the background thread.
   void Execute(Operation&& operation) override;
   void ExecuteBlocking(Operation&& operation) override;
 
-  // Schedules the `operation` for execution on the background thread once the
-  // `delay` from now (according to the system clock) has passed. Returns
-  // a handle which allows to cancel the delayed operation.
-  //
-  // `delay` must be non-negative; use `Execute` to schedule operations for
-  // immediate execution.
   DelayedOperation ScheduleExecution(Milliseconds delay,
-                                     TaggedOperation&& operation) override;
+                                     TaggedOperation&& tagged) override;
 
   bool IsAsyncCall() const override;
   std::string GetInvokerId() const override;
@@ -270,18 +262,18 @@ class ExecutorStd : public Executor {
     }
     Entry(Operation&& operation,
           const ExecutorStd::Id id,
-          const ExecutorStd::Tag tag = ImmediateTag)
+          const ExecutorStd::Tag tag = NoTag)
         : operation{std::move(operation)}, id{id}, tag{tag} {
     }
 
     bool IsImmediate() const {
-      return tag == ImmediateTag;
+      return tag == NoTag;
     }
 
     Operation operation;
     Id id = 0;
-    static constexpr Tag ImmediateTag = -1;
-    Tag tag = ImmediateTag;
+    static constexpr Tag NoTag = -1;
+    Tag tag = NoTag;
   };
   // Operations scheduled for immediate execution are also put on the schedule
   // (with due time set to `Immediate`).
