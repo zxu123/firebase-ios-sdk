@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef FIRESTORE_CORE_SRC_FIREBASE_FIRESTORE_UTIL_ASYNC_QUEUE_H_
-#define FIRESTORE_CORE_SRC_FIREBASE_FIRESTORE_UTIL_ASYNC_QUEUE_H_
+#ifndef FIRESTORE_CORE_SRC_FIREBASE_FIRESTORE_UTIL_EXECUTOR_STD_H_
+#define FIRESTORE_CORE_SRC_FIREBASE_FIRESTORE_UTIL_EXECUTOR_STD_H_
 
 #include <algorithm>
 #include <atomic>
@@ -228,15 +228,9 @@ class ExecutorStd : public Executor {
   bool IsAsyncCall() const override;
   std::string GetInvokerId() const override;
 
-  bool IsScheduled(Tag tag) const override {
-    return {};
-  }
-  bool IsScheduleEmpty() const override {
-    return {};
-  }
-  TaggedOperation PopFromSchedule() override {
-    return {};
-  }
+  bool IsScheduled(Tag tag) const override;
+  bool IsScheduleEmpty() const override;
+  TaggedOperation PopFromSchedule() override;
 
  private:
   using TimePoint = Schedule<Operation, Milliseconds>::TimePoint;
@@ -271,6 +265,8 @@ class ExecutorStd : public Executor {
           const ExecutorStd::Tag tag)
         : operation{std::move(operation)}, id{id}, tag{tag} {
     }
+    bool IsImmediate() const { return tag == -1; }
+
     Operation operation;
     Id id = 0;
     Tag tag = -1;
@@ -291,4 +287,4 @@ class ExecutorStd : public Executor {
 }  // namespace firestore
 }  // namespace firebase
 
-#endif  // FIRESTORE_CORE_SRC_FIREBASE_FIRESTORE_UTIL_ASYNC_QUEUE_H_
+#endif  // FIRESTORE_CORE_SRC_FIREBASE_FIRESTORE_UTIL_EXECUTOR_STD_H_

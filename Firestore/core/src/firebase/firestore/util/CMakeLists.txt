@@ -116,6 +116,8 @@ cc_library(
   SOURCES
     executor_libdispatch.cc
     executor_libdispatch.h
+    executor_std.cc
+    executor_std.h
     # FIXME OBC
     async_queue.cc
     async_queue.h

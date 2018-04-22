@@ -111,11 +111,32 @@ std::string PrintThreadId(const std::thread::id thread_id) {
 }  // namespace
 
 bool ExecutorStd::IsAsyncCall() const {
-  return GetInvokerId() != PrintThreadId(worker_thread_.get_id());
+  return GetInvokerId() == PrintThreadId(worker_thread_.get_id());
 }
 
 std::string ExecutorStd::GetInvokerId() const {
   return PrintThreadId(std::this_thread::get_id());
+}
+
+bool ExecutorStd::IsScheduled(const Tag tag) const {
+  return {};
+}
+
+bool ExecutorStd::IsScheduleEmpty() const {
+  return {};
+}
+
+TaggedOperation ExecutorStd::PopFromSchedule() {
+  Entry removed;
+  const bool success = schedule_.RemoveIf(
+      &removed, [](const Entry& e) { return !e.IsImmediate(); });
+  if (success) {
+    return TaggedOperation{removed.tag, std::move(removed.operation)};
+  }
+  return {};
+}
+
+void ExecutorStd::ExecuteBlocking(Operation&& operation) {
 }
 
 }  // namespace internal
