@@ -56,27 +56,12 @@ enum class TimerId {
   OnlineStateTimeout,
 };
 
-class DelayedOperation {
- public:
-  DelayedOperation();
-
-  void Cancel();
-
- private:
-  // Don't allow callers to create their own valid `DelayedOperation`s.
-  friend class AsyncQueue;
-  explicit DelayedOperation(internal::ScheduledOperationHandle&& handle);
-
-  internal::ScheduledOperationHandle handle_;
-};
-
 class AsyncQueue {
  public:
   using Milliseconds = internal::Milliseconds;
   using Operation = internal::Operation;
 
-  explicit AsyncQueue(
-      std::unique_ptr<internal::Executor> executor);
+  explicit AsyncQueue(std::unique_ptr<internal::Executor> executor);
 
   void VerifyIsAsyncCall() const;
   void VerifyCalledFromOperation() const;

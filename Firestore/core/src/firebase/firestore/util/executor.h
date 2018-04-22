@@ -25,15 +25,12 @@
 namespace firebase {
 namespace firestore {
 namespace util {
-namespace internal {
 
-using Operation = std::function<void()>;
-using Milliseconds = std::chrono::milliseconds;
-
-class ScheduledOperationHandle {
+class DelayedOperation {
  public:
-  ScheduledOperationHandle() {}
-  explicit ScheduledOperationHandle(std::function<void()>&& cancel_func)
+  DelayedOperation() {
+  }
+  explicit DelayedOperation(std::function<void()>&& cancel_func)
       : cancel_func_{std::move(cancel_func)} {
   }
   void Cancel() {
@@ -44,6 +41,11 @@ class ScheduledOperationHandle {
   std::function<void()> cancel_func_;
 };
 
+namespace internal {
+
+using Operation = std::function<void()>;
+using Milliseconds = std::chrono::milliseconds;
+
 struct TaggedOperation {
   using Tag = int;
   Tag tag{};
@@ -52,14 +54,14 @@ struct TaggedOperation {
 
 class Executor {
  public:
-   using Tag = TaggedOperation::Tag;
+  using Tag = TaggedOperation::Tag;
 
   virtual ~Executor() {
   }
 
   virtual void Execute(Operation&& operation) = 0;
   virtual void ExecuteBlocking(Operation&& operation) = 0;
-  virtual ScheduledOperationHandle ScheduleExecution(Milliseconds delay,
+  virtual DelayedOperation ScheduleExecution(Milliseconds delay,
                                              TaggedOperation&& operation) = 0;
 
   virtual bool IsAsyncCall() const = 0;

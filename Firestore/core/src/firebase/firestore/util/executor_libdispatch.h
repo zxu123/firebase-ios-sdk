@@ -44,11 +44,11 @@ using Func = std::function<void()>;
 
 // All member functions, including the constructor, are *only* invoked on the
 // Firestore queue. The only exception is `operator<`.
-class ScheduledOperation {
+class TimeSlot {
  public:
-  ScheduledOperation(ExecutorLibdispatch* const executor,
-                     const Milliseconds delay,
-                     TaggedOperation&& operation)
+  TimeSlot(ExecutorLibdispatch* const executor,
+           const Milliseconds delay,
+           TaggedOperation&& operation)
       : executor_{executor},
         target_time_{std::chrono::time_point_cast<Milliseconds>(
                          std::chrono::system_clock::now()) +
@@ -63,7 +63,7 @@ class ScheduledOperation {
     return std::move(operation_);
   }
 
-  bool operator<(const ScheduledOperation& rhs) const {
+  bool operator<(const TimeSlot& rhs) const {
     return target_time_ < rhs.target_time_;
   }
   bool operator==(const internal::TaggedOperation::Tag tag) const {
@@ -163,8 +163,8 @@ class ExecutorLibdispatch : public Executor {
     DispatchSync(dispatch_queue(), std::move(operation));
   }
 
-  ScheduledOperationHandle ScheduleExecution(Milliseconds delay,
-                                             TaggedOperation&& operation) override {
+  DelayedOperation ScheduleExecution(Milliseconds delay,
+                                     TaggedOperation&& operation) override {
     namespace chr = std::chrono;
     const dispatch_time_t delay_ns = dispatch_time(
         DISPATCH_TIME_NOW, chr::duration_cast<chr::nanoseconds>(delay).count());
@@ -181,21 +181,18 @@ class ExecutorLibdispatch : public Executor {
     // `dispatch` invocation, it happens-before any access from Executor to
     // `schedule_`.
 
-    auto const delayed_operation =
-        new ScheduledOperation{this, delay, std::move(operation)};
-    dispatch_after_f(delay_ns, dispatch_queue(), delayed_operation,
-                     ScheduledOperation::InvokedByLibdispatch);
-    schedule_.push_back(delayed_operation);
-    return ScheduledOperationHandle{
-        [this, delayed_operation] { RemoveFromSchedule(delayed_operation); }};
+    auto const time_slot = new TimeSlot{this, delay, std::move(operation)};
+    dispatch_after_f(delay_ns, dispatch_queue(), time_slot,
+                     TimeSlot::InvokedByLibdispatch);
+    schedule_.push_back(time_slot);
+    return DelayedOperation{
+        [this, time_slot] { RemoveFromSchedule(time_slot); }};
   }
 
-  void RemoveFromSchedule(const ScheduledOperation* const to_remove) {
-    const auto found =
-        std::find_if(schedule_.begin(), schedule_.end(),
-                     [to_remove](const ScheduledOperation* op) {
-                       return op == to_remove;
-                     });
+  void RemoveFromSchedule(const TimeSlot* const to_remove) {
+    const auto found = std::find_if(
+        schedule_.begin(), schedule_.end(),
+        [to_remove](const TimeSlot* op) { return op == to_remove; });
     // It's possible for the operation to be missing if libdispatch gets to run
     // it after it was force-run, for example.
     if (found != schedule_.end()) {
@@ -206,7 +203,7 @@ class ExecutorLibdispatch : public Executor {
 
   bool IsScheduled(const Tag tag) const override {
     return std::find_if(schedule_.begin(), schedule_.end(),
-                        [&tag](const ScheduledOperation* const operation) {
+                        [&tag](const TimeSlot* const operation) {
                           return *operation == tag;
                         }) != schedule_.end();
   }
@@ -216,9 +213,9 @@ class ExecutorLibdispatch : public Executor {
   }
 
   TaggedOperation PopFromSchedule() override {
-    std::sort(schedule_.begin(), schedule_.end(),
-              [](const ScheduledOperation* lhs,
-                 const ScheduledOperation* rhs) { return *lhs < *rhs; });
+    std::sort(
+        schedule_.begin(), schedule_.end(),
+        [](const TimeSlot* lhs, const TimeSlot* rhs) { return *lhs < *rhs; });
     const auto nearest = schedule_.begin();
     return (*nearest)->Unschedule();
   }
@@ -242,35 +239,34 @@ class ExecutorLibdispatch : public Executor {
   }
 
   std::atomic<dispatch_queue_t> dispatch_queue_;
-  std::vector<ScheduledOperation*> schedule_;
+  std::vector<TimeSlot*> schedule_;
 };
 
-void ScheduledOperation::Cancel() {
+void TimeSlot::Cancel() {
   if (!done_) {
     RemoveFromSchedule();
   }
 }
 
-void ScheduledOperation::InvokedByLibdispatch(void* const raw_self) {
-  auto const self = static_cast<ScheduledOperation*>(raw_self);
+void TimeSlot::InvokedByLibdispatch(void* const raw_self) {
+  auto const self = static_cast<TimeSlot*>(raw_self);
   self->Execute();
   delete self;
 }
 
-void ScheduledOperation::Execute() {
+void TimeSlot::Execute() {
   if (done_) {
     return;
   }
 
   RemoveFromSchedule();
 
-  FIREBASE_ASSERT_MESSAGE(
-      operation_.operation,
-      "ScheduledOperation contains an invalid function object");
+  FIREBASE_ASSERT_MESSAGE(operation_.operation,
+                          "TimeSlot contains an invalid function object");
   operation_.operation();
 }
 
-void ScheduledOperation::RemoveFromSchedule() {
+void TimeSlot::RemoveFromSchedule() {
   executor_->RemoveFromSchedule(this);
 }
 

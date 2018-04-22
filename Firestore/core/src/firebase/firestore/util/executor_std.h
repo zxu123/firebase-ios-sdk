@@ -222,8 +222,8 @@ class ExecutorStd : public Executor {
   //
   // `delay` must be non-negative; use `Execute` to schedule operations for
   // immediate execution.
-  ScheduledOperationHandle ScheduleExecution(
-      Milliseconds delay, TaggedOperation&& operation) override;
+  DelayedOperation ScheduleExecution(Milliseconds delay,
+                                     TaggedOperation&& operation) override;
 
   bool IsAsyncCall() const override;
   std::string GetInvokerId() const override;
@@ -265,7 +265,9 @@ class ExecutorStd : public Executor {
           const ExecutorStd::Tag tag)
         : operation{std::move(operation)}, id{id}, tag{tag} {
     }
-    bool IsImmediate() const { return tag == -1; }
+    bool IsImmediate() const {
+      return tag == -1;
+    }
 
     Operation operation;
     Id id = 0;

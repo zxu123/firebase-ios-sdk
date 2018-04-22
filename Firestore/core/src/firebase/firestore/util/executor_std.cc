@@ -44,7 +44,7 @@ void ExecutorStd::Execute(Operation&& operation) {
   DoExecute(std::move(operation), Immediate());
 }
 
-ScheduledOperationHandle ExecutorStd::ScheduleExecution(
+DelayedOperation ExecutorStd::ScheduleExecution(
     const Milliseconds delay, TaggedOperation&& operation) {
   // While negative delay can be interpreted as a request for immediate
   // execution, supporting it would provide a hacky way to modify FIFO ordering
@@ -58,7 +58,7 @@ ScheduledOperationHandle ExecutorStd::ScheduleExecution(
   const auto id =
       DoExecute(std::move(operation.operation), now + delay, operation.tag);
 
-  return ScheduledOperationHandle{[this, id] { TryCancel(id); }};
+  return DelayedOperation{[this, id] { TryCancel(id); }};
 }
 
 void ExecutorStd::TryCancel(const Id operation_id) {

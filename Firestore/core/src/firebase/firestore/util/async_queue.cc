@@ -23,21 +23,6 @@ namespace firebase {
 namespace firestore {
 namespace util {
 
-// DelayedOperation
-
-DelayedOperation::DelayedOperation() {
-}
-
-void DelayedOperation::Cancel() {
-  handle_.Cancel();
-}
-
-DelayedOperation::DelayedOperation(internal::ScheduledOperationHandle&& handle)
-    : handle_{std::move(handle)} {
-}
-
-// AsyncQueue
-
 AsyncQueue::AsyncQueue(std::unique_ptr<internal::Executor> executor)
     : executor_{std::move(executor)} {
   is_operation_in_progress_ = false;
@@ -94,8 +79,7 @@ DelayedOperation AsyncQueue::EnqueueAfterDelay(Milliseconds delay,
       "Attempted to schedule multiple operations with id %d", timer_id);
 
   internal::TaggedOperation tagged{static_cast<int>(timer_id), Wrap(operation)};
-  auto handle = executor_->ScheduleExecution(delay, std::move(tagged));
-  return DelayedOperation{std::move(handle)};
+  return executor_->ScheduleExecution(delay, std::move(tagged));
 }
 
 bool AsyncQueue::IsScheduled(const TimerId timer_id) const {
