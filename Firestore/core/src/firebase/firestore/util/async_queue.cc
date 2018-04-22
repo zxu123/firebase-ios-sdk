@@ -57,7 +57,6 @@ void AsyncQueue::Enqueue(const Operation& operation) {
 }
 
 void AsyncQueue::EnqueueAllowingNesting(const Operation& operation) {
-  // Note: can't move operation into lambda until C++14.
   executor_->Execute(Wrap(operation));
 }
 
@@ -104,6 +103,7 @@ void AsyncQueue::RunScheduledOperationsUntil(const TimerId last_timer_id) {
 }
 
 AsyncQueue::Operation AsyncQueue::Wrap(const Operation& operation) {
+  // Note: can't move `operation` into lambda until C++14.
   return [this, operation] { StartExecution(operation); };
 }
 

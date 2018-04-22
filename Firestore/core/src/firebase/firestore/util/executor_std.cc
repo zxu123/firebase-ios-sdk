@@ -16,6 +16,8 @@
 
 #include "Firestore/core/src/firebase/firestore/util/executor_std.h"
 
+#include <future>   // NOLINT(build/c++11)
+
 namespace firebase {
 namespace firestore {
 namespace util {
@@ -44,8 +46,8 @@ void ExecutorStd::Execute(Operation&& operation) {
   DoExecute(std::move(operation), Immediate());
 }
 
-DelayedOperation ExecutorStd::ScheduleExecution(
-    const Milliseconds delay, TaggedOperation&& operation) {
+DelayedOperation ExecutorStd::ScheduleExecution(const Milliseconds delay,
+                                                TaggedOperation&& operation) {
   // While negative delay can be interpreted as a request for immediate
   // execution, supporting it would provide a hacky way to modify FIFO ordering
   // of immediate operations.
@@ -118,25 +120,29 @@ std::string ExecutorStd::GetInvokerId() const {
   return PrintThreadId(std::this_thread::get_id());
 }
 
+void ExecutorStd::ExecuteBlocking(Operation&& operation) {
+  std::promise<void> signal_finished;
+  Execute([&] {
+    operation();
+    signal_finished.set_value();
+  });
+  signal_finished.get_future().wait();
+}
+
 bool ExecutorStd::IsScheduled(const Tag tag) const {
-  return {};
+  return schedule_.Contains([tag](const Entry& e) { return e.tag == tag; });
 }
 
 bool ExecutorStd::IsScheduleEmpty() const {
-  return {};
+  return schedule_.empty();
 }
 
 TaggedOperation ExecutorStd::PopFromSchedule() {
   Entry removed;
   const bool success = schedule_.RemoveIf(
       &removed, [](const Entry& e) { return !e.IsImmediate(); });
-  if (success) {
-    return TaggedOperation{removed.tag, std::move(removed.operation)};
-  }
-  return {};
-}
-
-void ExecutorStd::ExecuteBlocking(Operation&& operation) {
+  FIREBASE_ASSERT_MESSAGE(success, "TODO 5");
+  return TaggedOperation{removed.tag, std::move(removed.operation)};
 }
 
 }  // namespace internal

@@ -81,27 +81,6 @@ class Schedule {
     return false;
   }
 
-  // Removes the first entry satisfying predicate from the queue, moves it into
-  // `out`, and returns true. If no such entry exists, doesn't modify `out` and
-  // returns false. Predicate is applied to entries in order according to their
-  // scheduled time. `out` may be `nullptr` (in which case the value will be
-  // simply discarded).
-  //
-  // Note that this function doesn't take into account whether the removed entry
-  // is past its due time.
-  template <typename Pred>
-  bool RemoveIf(T* const out, const Pred pred) {
-    std::lock_guard<std::mutex> lock{mutex_};
-    const auto found =
-        std::find_if(scheduled_.begin(), scheduled_.end(),
-                     [&pred](const Entry& s) { return pred(s.value); });
-    if (found != scheduled_.end()) {
-      Extract(out, found);
-      return true;
-    }
-    return false;
-  }
-
   // Blocks until at least one entry is available for which the scheduled time
   // is due now (according to the system clock), removes the entry which is the
   // most overdue from the queue and moves it into `out`. The function will
@@ -142,6 +121,38 @@ class Schedule {
   size_t size() const {
     std::lock_guard<std::mutex> lock{mutex_};
     return scheduled_.size();
+  }
+
+  // Removes the first entry satisfying predicate from the queue, moves it into
+  // `out`, and returns true. If no such entry exists, doesn't modify `out` and
+  // returns false. Predicate is applied to entries in order according to their
+  // scheduled time. `out` may be `nullptr` (in which case the value will be
+  // simply discarded).
+  //
+  // Note that this function doesn't take into account whether the removed entry
+  // is past its due time.
+  template <typename Pred>
+  bool RemoveIf(T* const out, const Pred pred) {
+    std::lock_guard<std::mutex> lock{mutex_};
+    const auto found =
+        std::find_if(scheduled_.begin(), scheduled_.end(),
+                     [&pred](const Entry& s) { return pred(s.value); });
+    if (found != scheduled_.end()) {
+      Extract(out, found);
+      return true;
+    }
+    return false;
+  }
+
+  template <typename Pred>
+  bool Contains(const Pred pred) const {
+    std::lock_guard<std::mutex> lock{mutex_};
+    // While this logically duplicates part of the implementation of `RemoveIf`,
+    // a helper function would need two overloads, const and non-const,
+    // eliminating any gains in brevity.
+    return std::find_if(scheduled_.begin(), scheduled_.end(),
+                        [&pred](const Entry& s) { return pred(s.value); }) !=
+           scheduled_.end();
   }
 
  private:
