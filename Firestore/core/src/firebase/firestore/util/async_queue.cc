@@ -62,14 +62,9 @@ void AsyncQueue::EnqueueAllowingNesting(const Operation& operation) {
   executor_->Execute(Wrap(operation));
 }
 
-void AsyncQueue::EnqueueBlocking(const Operation& operation) {
-  VerifySequentialOrder();
-  executor_->ExecuteBlocking(Wrap(operation));
-}
-
-DelayedOperation AsyncQueue::EnqueueAfterDelay(Milliseconds delay,
-                                               TimerId timer_id,
-                                               Operation operation) {
+DelayedOperation AsyncQueue::EnqueueAfterDelay(const Milliseconds delay,
+                                               const TimerId timer_id,
+                                               const Operation& operation) {
   VerifyIsAsyncCall();
 
   // While not necessarily harmful, we currently don't expect to have multiple
@@ -81,6 +76,30 @@ DelayedOperation AsyncQueue::EnqueueAfterDelay(Milliseconds delay,
 
   Executor::TaggedOperation tagged{static_cast<int>(timer_id), Wrap(operation)};
   return executor_->ScheduleExecution(delay, std::move(tagged));
+}
+
+AsyncQueue::Operation AsyncQueue::Wrap(const Operation& operation) {
+  // Decorator pattern: wrap `operation` into a call to `StartExecution` to
+  // ensure that it doesn't spawn any nested operations.
+
+  // Note: can't move `operation` into lambda until C++14.
+  return [this, operation] { StartExecution(operation); };
+}
+
+void AsyncQueue::VerifySequentialOrder() const {
+  // This is the inverse of `VerifyCalledFromOperation`.
+  FIREBASE_ASSERT_MESSAGE(
+      !is_operation_in_progress_ || !executor_->IsAsyncCall(),
+      "Enforcing sequential order failed: currently executing operations "
+      "cannot enqueue nested operations (invoker id: '%s')",
+      executor_->GetInvokerId().c_str());
+}
+
+// Test-only functions
+
+void AsyncQueue::EnqueueBlocking(const Operation& operation) {
+  VerifySequentialOrder();
+  executor_->ExecuteBlocking(Wrap(operation));
 }
 
 bool AsyncQueue::IsScheduled(const TimerId timer_id) const {
@@ -103,20 +122,6 @@ void AsyncQueue::RunScheduledOperationsUntil(const TimerId last_timer_id) {
     } while (!executor_->IsScheduleEmpty() &&
              tagged.tag != static_cast<int>(last_timer_id));
   });
-}
-
-AsyncQueue::Operation AsyncQueue::Wrap(const Operation& operation) {
-  // Note: can't move `operation` into lambda until C++14.
-  return [this, operation] { StartExecution(operation); };
-}
-
-void AsyncQueue::VerifySequentialOrder() const {
-  // This is the inverse of `VerifyCalledFromOperation`.
-  FIREBASE_ASSERT_MESSAGE(
-      !is_operation_in_progress_ || !executor_->IsAsyncCall(),
-      "Enforcing sequential order failed: currently executing operations "
-      "cannot enqueue nested operations (invoker id: '%s')",
-      executor_->GetInvokerId().c_str());
 }
 
 }  // namespace util
