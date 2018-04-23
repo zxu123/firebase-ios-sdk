@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#include "Firestore/core/src/firebase/firestore/util/async_queue.h"
+#include "Firestore/core/test/firebase/firestore/util/async_queue_test.h"
+
 #include "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
 #include "Firestore/core/src/firebase/firestore/util/executor_std.h"
 
@@ -36,43 +37,14 @@ const TimerId kTimerId1 = TimerId::ListenStreamConnectionBackoff;
 const TimerId kTimerId2 = TimerId::ListenStreamIdle;
 const TimerId kTimerId3 = TimerId::WriteStreamConnectionBackoff;
 
-const auto kTimeout = std::chrono::seconds(5);
-
-// using ExecutorT = internal::ExecutorLibdispatch;
-using ExecutorT = internal::ExecutorStd;
-
-class AsyncQueueTest : public ::testing::Test {
- public:
-  AsyncQueueTest()
-      : underlying_queue{dispatch_queue_create("AsyncQueueTests",
-                                               DISPATCH_QUEUE_SERIAL)},
-        // queue{absl::make_unique<ExecutorT>(underlying_queue)},
-        queue{absl::make_unique<ExecutorT>()},
-        signal_finished{[] {}} {
-  }
-
-  // Googletest doesn't contain built-in functionality to block until an async
-  // operation completes, and there is no timeout by default. Work around both
-  // by resolving a packaged_task in the async operation and blocking on the
-  // associated future (with timeout).
-  bool WaitForTestToFinish() {
-    return signal_finished.get_future().wait_for(kTimeout) ==
-           std::future_status::ready;
-  }
-
-  const dispatch_queue_t underlying_queue;
-  AsyncQueue queue;
-  std::packaged_task<void()> signal_finished;
-};
-
 }  // namespace
 
-TEST_F(AsyncQueueTest, Enqueue) {
+TEST_P(AsyncQueueTest, Enqueue) {
   queue.Enqueue([&] { signal_finished(); });
   EXPECT_TRUE(WaitForTestToFinish());
 }
 
-TEST_F(AsyncQueueTest, EnqueueDisallowsNesting) {
+TEST_P(AsyncQueueTest, EnqueueDisallowsNesting) {
   queue.Enqueue([&] {  // clang-format off
     // clang-format on
     EXPECT_ANY_THROW(queue.Enqueue([] {}););
@@ -82,7 +54,7 @@ TEST_F(AsyncQueueTest, EnqueueDisallowsNesting) {
   EXPECT_TRUE(WaitForTestToFinish());
 }
 
-TEST_F(AsyncQueueTest, EnqueueAllowingNestingWorksFromWithinEnqueue) {
+TEST_P(AsyncQueueTest, EnqueueAllowingNestingWorksFromWithinEnqueue) {
   queue.Enqueue([&] {  // clang-format off
     queue.EnqueueAllowingNesting([&] { signal_finished(); });
     // clang-format on
@@ -91,49 +63,30 @@ TEST_F(AsyncQueueTest, EnqueueAllowingNestingWorksFromWithinEnqueue) {
   EXPECT_TRUE(WaitForTestToFinish());
 }
 
-TEST_F(AsyncQueueTest, SameQueueIsAllowedForUnownedActions) {
-  internal::DispatchAsync(underlying_queue, [this] {
-    queue.Enqueue([this] { signal_finished(); });
-  });
-
-  EXPECT_TRUE(WaitForTestToFinish());
-}
-
-TEST_F(AsyncQueueTest, EnqueueBlocking) {
+TEST_P(AsyncQueueTest, EnqueueBlocking) {
   bool finished = false;
   queue.EnqueueBlocking([&] { finished = true; });
   EXPECT_TRUE(finished);
 }
 
-TEST_F(AsyncQueueTest, EnqueueBlockingDisallowsNesting) {
+TEST_P(AsyncQueueTest, EnqueueBlockingDisallowsNesting) {
   queue.EnqueueBlocking([&] {  // clang-format off
     EXPECT_ANY_THROW(queue.EnqueueBlocking([] {}););
     // clang-format on
   });
 }
 
-TEST_F(AsyncQueueTest, StartExecutionDisallowsNesting) {
+TEST_P(AsyncQueueTest, StartExecutionDisallowsNesting) {
   queue.EnqueueBlocking(
       [&] { EXPECT_ANY_THROW(queue.StartExecution([] {});); });
 }
 
-TEST_F(AsyncQueueTest, VerifyCalledFromOperationRequiresBeingCalledAsync) {
-  ASSERT_NE(underlying_queue, dispatch_get_main_queue());
-  EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
-}
-
-TEST_F(AsyncQueueTest, VerifyCalledFromOperationRequiresOperationInProgress) {
-  internal::DispatchSync(underlying_queue, [this] {
-    EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
-  });
-}
-
-TEST_F(AsyncQueueTest, VerifyCalledFromOperationWorksWithOperationInProgress) {
+TEST_P(AsyncQueueTest, VerifyCalledFromOperationWorksWithOperationInProgress) {
   queue.EnqueueBlocking(
       [&] { EXPECT_NO_THROW(queue.VerifyCalledFromOperation()); });
 }
 
-TEST_F(AsyncQueueTest, CanScheduleOperationsInTheFuture) {
+TEST_P(AsyncQueueTest, CanScheduleOperationsInTheFuture) {
   std::string steps;
 
   queue.Enqueue([&steps] { steps += '1'; });
@@ -151,7 +104,7 @@ TEST_F(AsyncQueueTest, CanScheduleOperationsInTheFuture) {
   EXPECT_EQ(steps, "1234");
 }
 
-TEST_F(AsyncQueueTest, CanCancelDelayedCallbacks) {
+TEST_P(AsyncQueueTest, CanCancelDelayedCallbacks) {
   std::string steps;
 
   queue.Enqueue([&] {
@@ -178,7 +131,7 @@ TEST_F(AsyncQueueTest, CanCancelDelayedCallbacks) {
   queue.EnqueueBlocking([&] { EXPECT_FALSE(queue.IsScheduled(kTimerId1)); });
 }
 
-TEST_F(AsyncQueueTest, DelayedOperationIsValidAfterTheOperationHasRun) {
+TEST_P(AsyncQueueTest, DelayedOperationIsValidAfterTheOperationHasRun) {
   DelayedOperation delayed_operation;
   queue.Enqueue([&] {
     delayed_operation = queue.EnqueueAfterDelay(
@@ -191,7 +144,7 @@ TEST_F(AsyncQueueTest, DelayedOperationIsValidAfterTheOperationHasRun) {
   queue.EnqueueBlocking([&] { EXPECT_NO_THROW(delayed_operation.Cancel()); });
 }
 
-TEST_F(AsyncQueueTest, CanManuallyDrainAllDelayedCallbacksForTesting) {
+TEST_P(AsyncQueueTest, CanManuallyDrainAllDelayedCallbacksForTesting) {
   std::string steps;
 
   queue.Enqueue([&] {
@@ -209,7 +162,7 @@ TEST_F(AsyncQueueTest, CanManuallyDrainAllDelayedCallbacksForTesting) {
   EXPECT_EQ(steps, "1234");
 }
 
-TEST_F(AsyncQueueTest, CanManuallyDrainSpecificDelayedCallbacksForTesting) {
+TEST_P(AsyncQueueTest, CanManuallyDrainSpecificDelayedCallbacksForTesting) {
   std::string steps;
 
   queue.Enqueue([&] {
@@ -229,6 +182,38 @@ TEST_F(AsyncQueueTest, CanManuallyDrainSpecificDelayedCallbacksForTesting) {
   EXPECT_EQ(steps, "1234");
 }
 
-}  // namespace util
+internal::Executor* CreateExecutorStd() {
+  return new internal::ExecutorStd{};
+}
+
+INSTANTIATE_TEST_CASE_P(AsyncQueueStd,
+                        AsyncQueueTest,
+                        ::testing::Values(new internal::ExecutorStd{}));
+
+// : underlying_queue{dispatch_queue_create("AsyncQueueTests",
+//                                          DISPATCH_QUEUE_SERIAL)},
+// const dispatch_queue_t underlying_queue;
+
+// TEST_P(AsyncQueueTest, SameQueueIsAllowedForUnownedActions) {
+//   internal::DispatchAsync(underlying_queue, [this] {
+//     queue.Enqueue([this] { signal_finished(); });
+//   });
+// EXPECT_TRUE(WaitForTestToFinish());
+// }
+
+// TEST_P(AsyncQueueTest, VerifyCalledFromOperationRequiresOperationInProgress)
+// {
+//   internal::DispatchSync(underlying_queue, [this] {
+//     EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
+//   });
+// }
+
+// TEST_P(AsyncQueueTest, VerifyCalledFromOperationRequiresBeingCalledAsync) {
+//   ASSERT_NE(underlying_queue, dispatch_get_main_queue());
+//   EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
+// }
+
+
 }  // namespace firestore
+}  // namespace firebase
 }  // namespace firebase

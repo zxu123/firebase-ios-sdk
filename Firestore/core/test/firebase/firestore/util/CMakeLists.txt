@@ -63,16 +63,26 @@ endif()
 
 ## async queue
 
-if(HAVE_LIBDISPATCH)
-  cc_test(
-    firebase_firestore_util_async_queue_libdispatch_test
-    SOURCES
-      async_queue_test_libdispatch.cc
-    DEPENDS
-      absl_strings
-      firebase_firestore_util_async_queue_libdispatch
-  )
-endif()
+cc_test(
+  firebase_firestore_util_async_queue_test
+  SOURCES
+    async_queue_test.h
+    async_queue_test.cc
+  DEPENDS
+    absl_strings
+    firebase_firestore_util_async_queue_libdispatch
+)
+
+# if(HAVE_LIBDISPATCH)
+#   cc_test(
+#     firebase_firestore_util_async_queue_libdispatch_test
+#     SOURCES
+#       async_queue_test_libdispatch.cc
+#     DEPENDS
+#       absl_strings
+#       firebase_firestore_util_async_queue_libdispatch
+#   )
+# endif()
 
 ## main library
 
