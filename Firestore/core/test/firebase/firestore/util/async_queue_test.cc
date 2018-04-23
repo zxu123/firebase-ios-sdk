@@ -16,7 +16,6 @@
 
 #include "Firestore/core/test/firebase/firestore/util/async_queue_test.h"
 
-#include "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
 #include "Firestore/core/src/firebase/firestore/util/executor_std.h"
 
 #include <chrono>  // NOLINT(build/c++11)
@@ -181,40 +180,6 @@ TEST_P(AsyncQueueTest, CanManuallyDrainSpecificDelayedCallbacksForTesting) {
   queue.RunScheduledOperationsUntil(kTimerId3);
   EXPECT_EQ(steps, "1234");
 }
-
-INSTANTIATE_TEST_CASE_P(AsyncQueueStd,
-                        AsyncQueueTest,
-                        ::testing::Values(new internal::ExecutorStd{}));
-
-INSTANTIATE_TEST_CASE_P(AsyncQueueLibdispatch,
-                        AsyncQueueTest,
-                        ::testing::Values(new internal::ExecutorLibdispatch{
-                      dispatch_queue_create("AsyncQueueTests",
-                                         DISPATCH_QUEUE_SERIAL)    }));
-
-// : underlying_queue{dispatch_queue_create("AsyncQueueTests",
-//                                          DISPATCH_QUEUE_SERIAL)},
-// const dispatch_queue_t underlying_queue;
-
-// TEST_P(AsyncQueueTest, SameQueueIsAllowedForUnownedActions) {
-//   internal::DispatchAsync(underlying_queue, [this] {
-//     queue.Enqueue([this] { signal_finished(); });
-//   });
-// EXPECT_TRUE(WaitForTestToFinish());
-// }
-
-// TEST_P(AsyncQueueTest, VerifyCalledFromOperationRequiresOperationInProgress)
-// {
-//   internal::DispatchSync(underlying_queue, [this] {
-//     EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
-//   });
-// }
-
-// TEST_P(AsyncQueueTest, VerifyCalledFromOperationRequiresBeingCalledAsync) {
-//   ASSERT_NE(underlying_queue, dispatch_get_main_queue());
-//   EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
-// }
-
 
 }  // namespace firestore
 }  // namespace firebase

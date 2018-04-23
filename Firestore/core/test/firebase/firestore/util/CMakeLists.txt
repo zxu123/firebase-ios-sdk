@@ -68,21 +68,24 @@ cc_test(
   SOURCES
     async_queue_test.h
     async_queue_test.cc
+    async_queue_test_std.cc
   DEPENDS
     absl_strings
     firebase_firestore_util_async_queue_libdispatch
 )
 
-# if(HAVE_LIBDISPATCH)
-#   cc_test(
-#     firebase_firestore_util_async_queue_libdispatch_test
-#     SOURCES
-#       async_queue_test_libdispatch.cc
-#     DEPENDS
-#       absl_strings
-#       firebase_firestore_util_async_queue_libdispatch
-#   )
-# endif()
+if(HAVE_LIBDISPATCH)
+  cc_test(
+    firebase_firestore_util_async_queue_test_libdispatch
+    SOURCES
+      async_queue_test.h
+      async_queue_test.cc
+      async_queue_test_libdispatch.cc
+    DEPENDS
+      absl_strings
+      firebase_firestore_util_async_queue_libdispatch
+  )
+endif()
 
 ## main library
 
