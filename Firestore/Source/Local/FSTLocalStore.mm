@@ -347,7 +347,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
 
       //[self.garbageCollector addPotentialGarbageKey:key];
       if ([limboDocuments containsObject:key]) {
-        [self.persistence.referenceDelegate documentUpdated:key];
+        [self.persistence.referenceDelegate documentUpdated:key sequenceNumber:sequenceNumber];
       }
     }
 
