@@ -182,13 +182,15 @@ TEST_P(AsyncQueueTest, CanManuallyDrainSpecificDelayedCallbacksForTesting) {
   EXPECT_EQ(steps, "1234");
 }
 
-internal::Executor* CreateExecutorStd() {
-  return new internal::ExecutorStd{};
-}
-
 INSTANTIATE_TEST_CASE_P(AsyncQueueStd,
                         AsyncQueueTest,
                         ::testing::Values(new internal::ExecutorStd{}));
+
+INSTANTIATE_TEST_CASE_P(AsyncQueueLibdispatch,
+                        AsyncQueueTest,
+                        ::testing::Values(new internal::ExecutorLibdispatch{
+                      dispatch_queue_create("AsyncQueueTests",
+                                         DISPATCH_QUEUE_SERIAL)    }));
 
 // : underlying_queue{dispatch_queue_create("AsyncQueueTests",
 //                                          DISPATCH_QUEUE_SERIAL)},
