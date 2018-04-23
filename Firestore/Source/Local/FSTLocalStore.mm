@@ -320,6 +320,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
 
     // TODO(klimt): This could probably be an NSMutableDictionary.
     FSTDocumentKeySet *changedDocKeys = [FSTDocumentKeySet keySet];
+    FSTDocumentKeySet *limboDocuments = remoteEvent.limboDocumentChanges;
     for (const auto &kv : remoteEvent.documentUpdates) {
       const DocumentKey &key = kv.first;
       FSTMaybeDocument *doc = kv.second;
@@ -341,10 +342,13 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
       // The document might be garbage because it was unreferenced by everything.
       // Make sure to mark it as garbage if it is...
 
-      // This can happen because we can get updates for queries we've stopped listening
-      // to
+      // This can happen because we can get updates for limbo queries that we're not aware of in
+      // the local store
+
       //[self.garbageCollector addPotentialGarbageKey:key];
-      [self.persistence.referenceDelegate documentUpdated:key];
+      if ([limboDocuments containsObject:key]) {
+        [self.persistence.referenceDelegate documentUpdated:key];
+      }
     }
 
     // HACK: The only reason we allow omitting snapshot version is so we can synthesize remote

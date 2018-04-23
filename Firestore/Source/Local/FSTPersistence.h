@@ -125,7 +125,7 @@ extern const FSTListenSequenceNumber kFSTListenSequenceNumberInvalid;
 - (void)removeMutationReference:(FSTDocumentKey *)key
                  sequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
 
-- (void)documentUpdated:(FSTDocumentKey *)key;
+- (void)documentUpdated:(FSTDocumentKey *)key sequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
 
 @end
 

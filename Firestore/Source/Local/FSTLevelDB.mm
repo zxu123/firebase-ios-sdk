@@ -159,17 +159,20 @@ using leveldb::WriteOptions;
   return _gc;
 }
 
-- (void)removeMutationReference:(FSTDocumentKey *)key
-                 sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+- (void)writeSentinelForKey:(FSTDocumentKey *)key sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
   std::string encodedSequenceNumber;
   OrderedCode::WriteSignedNumIncreasing(&encodedSequenceNumber, sequenceNumber);
   std::string sentinelKey = [FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:key];
   _db.currentTransaction->Put(sentinelKey, encodedSequenceNumber);
 }
 
-- (void)documentUpdated:(FSTDocumentKey *)key {
-  // Not a no-op. *if* this document is not referenced, it will be leaked because we don't assign a sequence number
-  // TODO(gsoltis): implement this
+- (void)removeMutationReference:(FSTDocumentKey *)key
+                 sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  [self writeSentinelForKey:key sequenceNumber:sequenceNumber];
+}
+
+- (void)documentUpdated:(FSTDocumentKey *)key sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  [self writeSentinelForKey:key sequenceNumber:sequenceNumber];
 }
 
 

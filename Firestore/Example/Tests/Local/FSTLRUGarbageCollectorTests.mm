@@ -404,6 +404,8 @@ NS_ASSUME_NONNULL_BEGIN
   [persistence shutdown];
 }
 
+// TODO(gsoltis): write a test that includes limbo documents
+
 - (void)testRemoveTargetsThenGC {
   if ([self isTestBaseClass]) return;
 

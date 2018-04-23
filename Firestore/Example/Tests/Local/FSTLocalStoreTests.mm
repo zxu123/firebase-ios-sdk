@@ -613,14 +613,14 @@ NS_ASSUME_NONNULL_BEGIN
   if ([self isTestBaseClass]) return;
   if (![self gcIsEager]) return;
 
-  [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDeletedDoc("foo/bar", 2), @[ @1 ], @[])];
+  [self applyRemoteEvent:FSTTestUpdateRemoteEventWithLimboTargets(FSTTestDeletedDoc("foo/bar", 2), @[ @1 ], @[], @[ @1 ])];
   FSTAssertRemoved(@[ @"foo/bar" ]);
 
   [self collectGarbage];
   FSTAssertNotContains(@"foo/bar");
 
-  [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 2, @{@"foo" : @"bar"}, NO),
-                                                  @[ @1 ], @[])];
+  [self applyRemoteEvent:FSTTestUpdateRemoteEventWithLimboTargets(FSTTestDoc("foo/bar", 2, @{@"foo" : @"bar"}, NO),
+                                                  @[ @1 ], @[], @[ @1 ])];
   [self collectGarbage];
   FSTAssertNotContains(@"foo/bar");
 }
@@ -767,8 +767,8 @@ NS_ASSUME_NONNULL_BEGIN
   if (![self gcIsEager]) return;
 
   FSTTargetID targetID = 321;
-  [self applyRemoteEvent:FSTTestUpdateRemoteEvent(FSTTestDoc("foo/bar", 1, @{}, NO),
-                                                  @[ @(targetID) ], @[])];
+  [self applyRemoteEvent:FSTTestUpdateRemoteEventWithLimboTargets(FSTTestDoc("foo/bar", 1, @{}, NO),
+                                                  @[ @(targetID) ], @[], @[ @(targetID) ])];
   //FSTAssertContains(FSTTestDoc("foo/bar", 1, @{}, NO));
 
   //[self collectGarbage];

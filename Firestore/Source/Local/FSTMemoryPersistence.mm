@@ -254,7 +254,8 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   [_persistence.queryCache updateQueryData:updated];
 }
 
-- (void)documentUpdated:(FSTDocumentKey *)key {
+- (void)documentUpdated:(FSTDocumentKey *)key sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  _sequenceNumbers[key] = @(sequenceNumber);
   // TODO(gsoltis): probably need to implement this
   // Need to bump sequence number?
 }
@@ -393,7 +394,7 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   return NO;
 }
 
-- (void)documentUpdated:(FSTDocumentKey *)key {
+- (void)documentUpdated:(FSTDocumentKey *)key sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
   if ([self isReferenced:key]) {
     _orphaned->erase(key);
   } else {
