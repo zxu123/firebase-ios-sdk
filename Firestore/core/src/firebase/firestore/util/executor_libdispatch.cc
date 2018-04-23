@@ -119,6 +119,8 @@ void TimeSlot::InvokedByLibdispatch(void* const raw_self) {
 
 void TimeSlot::Execute() {
   if (done_) {
+    // `done_` might mean that the executor is already destroyed, so don't call
+    // `RemoveFromSchedule`.
     return;
   }
 

@@ -32,15 +32,16 @@ class DelayedOperation {
  public:
   DelayedOperation() {
   }
-  // Internal use only.
-  explicit DelayedOperation(std::function<void()>&& cancel_func)
-      : cancel_func_{std::move(cancel_func)} {
-  }
 
   // If the operation has not been run yet, cancels the operation. Otherwise,
   // this function is a no-op.
   void Cancel() {
     cancel_func_();
+  }
+
+  // Internal use only.
+  explicit DelayedOperation(std::function<void()>&& cancel_func)
+      : cancel_func_{std::move(cancel_func)} {
   }
 
  private:
@@ -53,8 +54,7 @@ namespace internal {
 // ("operations").
 //
 // Operations may be scheduled for immediate or delayed execution. Operations
-// scheduled for the exact same time are FIFO ordered. Immediate operations
-// always come before delayed operations.
+// scheduled for the exact same time are FIFO ordered.
 //
 // The operations are executed sequentially; only a single operation is executed
 // at any given time.
@@ -70,7 +70,7 @@ class Executor {
   // the later. The tag is entirely opaque for the executor; in particular,
   // uniqueness of tags is not enforced.
   struct TaggedOperation {
-    Tag tag{};
+    Tag tag = 0;
     Operation operation;
   };
 
@@ -81,7 +81,7 @@ class Executor {
   // possible. If called in quick succession, the operations will be
   // FIFO-ordered.
   virtual void Execute(Operation&& operation) = 0;
-  // Like `Enqueue`, but blocks until the `operation` finishes, consequently
+  // Like `Execute`, but blocks until the `operation` finishes, consequently
   // draining immediate operations from the executor.
   virtual void ExecuteBlocking(Operation&& operation) = 0;
   // Scheduled the given `operation` to be executed after `delay` milliseconds

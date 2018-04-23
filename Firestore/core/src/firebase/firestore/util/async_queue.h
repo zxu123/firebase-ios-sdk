@@ -74,7 +74,8 @@ enum class TimerId {
 class AsyncQueue {
  public:
   using Operation = internal::Executor::Operation;
-  // A more-or-less arbitrary unit for scheduling operations in the future.
+  // A more-or-less arbitrary unit of time for scheduling operations in the
+  // future.
   using Milliseconds = internal::Executor::Milliseconds;
 
   explicit AsyncQueue(std::unique_ptr<internal::Executor> executor);
@@ -117,7 +118,7 @@ class AsyncQueue {
   // Immediately executes the `operation` on the queue.
   //
   // Precondition: the queue is idle at the moment of the call (no other
-  // operation was currently being executed).
+  // operation is currently being executed).
   //
   // Precondition: `StartExecution` is being invoked asynchronously on the
   // queue.
@@ -130,10 +131,16 @@ class AsyncQueue {
 
   // Checks whether an operation tagged with `timer_id` is currently scheduled
   // for execution in the future.
+  //
+  // Precondition: `StartExecution` is being invoked asynchronously on the
+  // queue.
   bool IsScheduled(TimerId timer_id) const;
 
   // Force runs operations scheduled for future execution, in scheduled order,
   // up to *and including* the operation tagged with `last_timer_id`.
+  //
+  // Precondition: `RunScheduledOperationsUntil` is *not* being invoked on the
+  // queue.
   void RunScheduledOperationsUntil(TimerId last_timer_id);
 
  private:
