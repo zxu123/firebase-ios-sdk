@@ -23,9 +23,12 @@
 #import "Firestore/Source/Model/FSTDocumentKey.h"
 #import "Firestore/Source/Remote/FSTExistenceFilter.h"
 #import "Firestore/Source/Remote/FSTWatchChange.h"
+#include "Firestore/core/src/firebase/firestore/model/document_key.h"
 
 #import "Firestore/Example/Tests/Remote/FSTWatchChange+Testing.h"
 #import "Firestore/Example/Tests/Util/FSTHelpers.h"
+
+using firebase::firestore::model::DocumentKey;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -549,6 +552,140 @@ NS_ASSUME_NONNULL_BEGIN
   XCTAssertEqualObjects(event.targetChanges[@2].snapshotVersion, FSTTestVersion(3));
   XCTAssertEqual(event.targetChanges[@2].currentStatusUpdate, FSTCurrentStatusUpdateNone);
   XCTAssertEqualObjects(event.targetChanges[@2].resumeToken, resumeToken3);
+}
+
+- (void)testSynthesizeDeletes {
+  FSTWatchChange *shouldSynthesize =
+      [FSTWatchTargetChange changeWithState:FSTWatchTargetChangeStateCurrent targetIDs:@[ @1 ]];
+  FSTWatchChange *wrongState =
+      [FSTWatchTargetChange changeWithState:FSTWatchTargetChangeStateNoChange targetIDs:@[ @2 ]];
+  FSTWatchChange *hasDocument =
+      [FSTWatchTargetChange changeWithState:FSTWatchTargetChangeStateCurrent targetIDs:@[ @3 ]];
+  FSTDocument *doc = FSTTestDoc("docs/1", 1, @{ @"value" : @1 }, NO);
+  FSTWatchChange *docChange = [[FSTDocumentWatchChange alloc] initWithUpdatedTargetIDs:@[ @3 ]
+                                                                      removedTargetIDs:@[]
+                                                                           documentKey:doc.key
+                                                                              document:doc];
+
+  FSTWatchChangeAggregator *aggregator =
+      [self aggregatorWithTargets:@[ @1, @2, @3 ]
+                      outstanding:_noPendingResponses
+                          changes:@[ shouldSynthesize, wrongState, hasDocument, docChange ]];
+
+  FSTRemoteEvent *event = [aggregator remoteEvent];
+  DocumentKey synthesized = DocumentKey::FromPathString("docs/2");
+  XCTAssertEqual(event.documentUpdates.find(synthesized), event.documentUpdates.end());
+
+  FSTTargetChange *limboTargetChange = event.targetChanges[@1];
+  [event synthesizeDeleteForLimboTargetChange:limboTargetChange key:synthesized];
+  FSTDeletedDocument *expected =
+      [FSTDeletedDocument documentWithKey:synthesized version:event.snapshotVersion];
+  XCTAssertEqualObjects(expected, event.documentUpdates.at(synthesized));
+
+  DocumentKey notSynthesized1 = DocumentKey::FromPathString("docs/no1");
+  [event synthesizeDeleteForLimboTargetChange:event.targetChanges[@2] key:notSynthesized1];
+  XCTAssertEqual(event.documentUpdates.find(notSynthesized1), event.documentUpdates.end());
+
+  [event synthesizeDeleteForLimboTargetChange:event.targetChanges[@3] key:doc.key];
+  FSTMaybeDocument *docData = event.documentUpdates.at(doc.key);
+  XCTAssertFalse([docData isKindOfClass:[FSTDeletedDocument class]]);
+}
+
+- (void)testFilterUpdates {
+  FSTDocument *newDoc = FSTTestDoc("docs/new", 1, @{@"key" : @"value"}, NO);
+  FSTDocument *existingDoc = FSTTestDoc("docs/existing", 1, @{@"some" : @"data"}, NO);
+  FSTWatchChange *newDocChange = [[FSTDocumentWatchChange alloc] initWithUpdatedTargetIDs:@[ @1 ]
+                                                                         removedTargetIDs:@[]
+                                                                              documentKey:newDoc.key
+                                                                                 document:newDoc];
+
+  FSTWatchTargetChange *resetTargetChange =
+      [FSTWatchTargetChange changeWithState:FSTWatchTargetChangeStateReset
+                                  targetIDs:@[ @2 ]
+                                resumeToken:_resumeToken1];
+
+  FSTWatchChange *existingDocChange =
+      [[FSTDocumentWatchChange alloc] initWithUpdatedTargetIDs:@[ @1, @2 ]
+                                              removedTargetIDs:@[]
+                                                   documentKey:existingDoc.key
+                                                      document:existingDoc];
+
+  FSTWatchChangeAggregator *aggregator =
+      [self aggregatorWithTargets:@[ @1, @2 ]
+                      outstanding:_noPendingResponses
+                          changes:@[ newDocChange, resetTargetChange, existingDocChange ]];
+  FSTRemoteEvent *event = [aggregator remoteEvent];
+  FSTDocumentKeySet *existingKeys = [[FSTDocumentKeySet keySet] setByAddingObject:existingDoc.key];
+
+  FSTTargetChange *updateChange = event.targetChanges[@1];
+  XCTAssertTrue([updateChange.mapping isKindOfClass:[FSTUpdateMapping class]]);
+  FSTUpdateMapping *update = (FSTUpdateMapping *)updateChange.mapping;
+  FSTDocumentKey *existingDocKey = existingDoc.key;
+  FSTDocumentKey *newDocKey = newDoc.key;
+  XCTAssertTrue([update.addedDocuments containsObject:existingDocKey]);
+
+  [event filterUpdatesFromTargetChange:updateChange existingDocuments:existingKeys];
+  // Now it's been filtered, since it already existed.
+  XCTAssertFalse([update.addedDocuments containsObject:existingDocKey]);
+  XCTAssertTrue([update.addedDocuments containsObject:newDocKey]);
+
+  FSTTargetChange *resetChange = event.targetChanges[@2];
+  XCTAssertTrue([resetChange.mapping isKindOfClass:[FSTResetMapping class]]);
+  FSTResetMapping *resetMapping = (FSTResetMapping *)resetChange.mapping;
+  XCTAssertTrue([resetMapping.documents containsObject:existingDocKey]);
+
+  [event filterUpdatesFromTargetChange:resetChange existingDocuments:existingKeys];
+  // Document is still there, even though it already exists. Reset mappings don't get filtered.
+  XCTAssertTrue([resetMapping.documents containsObject:existingDocKey]);
+}
+
+- (void)testTracksLimboDocuments {
+  // Add 3 docs: 1 is limbo and non-limbo, 2 is limbo-only, 3 is non-limbo
+  FSTDocument *doc1 = FSTTestDoc("docs/1", 1, @{@"key" : @"value"}, NO);
+  FSTDocument *doc2 = FSTTestDoc("docs/2", 1, @{@"key" : @"value"}, NO);
+  FSTDocument *doc3 = FSTTestDoc("docs/3", 1, @{@"key" : @"value"}, NO);
+
+  // Target 2 is a limbo target
+
+  FSTWatchChange *docChange1 = [[FSTDocumentWatchChange alloc] initWithUpdatedTargetIDs:@[ @1, @2 ]
+                                                                       removedTargetIDs:@[]
+                                                                            documentKey:doc1.key
+                                                                               document:doc1];
+
+  FSTWatchChange *docChange2 = [[FSTDocumentWatchChange alloc] initWithUpdatedTargetIDs:@[ @2 ]
+                                                                       removedTargetIDs:@[]
+                                                                            documentKey:doc2.key
+                                                                               document:doc2];
+
+  FSTWatchChange *docChange3 = [[FSTDocumentWatchChange alloc] initWithUpdatedTargetIDs:@[ @1 ]
+                                                                       removedTargetIDs:@[]
+                                                                            documentKey:doc3.key
+                                                                               document:doc3];
+
+  FSTWatchChange *targetsChange =
+      [FSTWatchTargetChange changeWithState:FSTWatchTargetChangeStateCurrent targetIDs:@[ @1, @2 ]];
+
+  NSMutableDictionary<NSNumber *, FSTQueryData *> *listens = [NSMutableDictionary dictionary];
+  listens[@1] = [FSTQueryData alloc];
+  listens[@2] = [[FSTQueryData alloc] initWithQuery:nil
+                                           targetID:2
+                               listenSequenceNumber:1000
+                                            purpose:FSTQueryPurposeLimboResolution];
+  FSTWatchChangeAggregator *aggregator =
+      [[FSTWatchChangeAggregator alloc] initWithSnapshotVersion:FSTTestVersion(3)
+                                                  listenTargets:listens
+                                         pendingTargetResponses:@{}];
+
+  [aggregator addWatchChanges:@[ docChange1, docChange2, docChange3, targetsChange ]];
+
+  FSTRemoteEvent *event = [aggregator remoteEvent];
+  FSTDocumentKeySet *limboDocChanges = event.limboDocumentChanges;
+  // Doc1 is in both limbo and non-limbo targets, therefore not tracked as limbo
+  XCTAssertFalse([limboDocChanges containsObject:doc1.key]);
+  // Doc2 is only in the limbo target, so is tracked as a limbo document
+  XCTAssertTrue([limboDocChanges containsObject:doc2.key]);
+  // Doc3 is only in the non-limbo target, therefore not tracked as limbo
+  XCTAssertFalse([limboDocChanges containsObject:doc3.key]);
 }
 
 @end

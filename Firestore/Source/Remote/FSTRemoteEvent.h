@@ -151,7 +151,8 @@ typedef NS_ENUM(NSUInteger, FSTCurrentStatusUpdate) {
 eventWithSnapshotVersion:(FSTSnapshotVersion *)snapshotVersion
            targetChanges:(NSMutableDictionary<NSNumber *, FSTTargetChange *> *)targetChanges
          documentUpdates:
-             (std::map<firebase::firestore::model::DocumentKey, FSTMaybeDocument *>)documentUpdates;
+             (std::map<firebase::firestore::model::DocumentKey, FSTMaybeDocument *>)documentUpdates
+          limboDocuments:(FSTDocumentKeySet *)limboDocuments;
 
 /** The snapshot version this event brings us up to. */
 @property(nonatomic, strong, readonly) FSTSnapshotVersion *snapshotVersion;
@@ -159,6 +160,8 @@ eventWithSnapshotVersion:(FSTSnapshotVersion *)snapshotVersion
 /** A map from target to changes to the target. See TargetChange. */
 @property(nonatomic, strong, readonly)
     NSDictionary<FSTBoxedTargetID *, FSTTargetChange *> *targetChanges;
+
+@property(nonatomic, strong, readonly) FSTDocumentKeySet *limboDocumentChanges;
 
 /**
  * A set of which documents have changed or been deleted, along with the doc's new values
@@ -171,6 +174,17 @@ eventWithSnapshotVersion:(FSTSnapshotVersion *)snapshotVersion
 
 /** Handles an existence filter mismatch */
 - (void)handleExistenceFilterMismatchForTargetID:(FSTBoxedTargetID *)targetID;
+
+- (void)synthesizeDeleteForLimboTargetChange:(FSTTargetChange *)targetChange
+                                         key:(const firebase::firestore::model::DocumentKey &)key;
+
+/**
+ * Strips out mapping changes that aren't actually changes. That is, if the document already
+ * existed in the target, and is being added in the target, and this is not a reset, we can
+ * skip doing the work to associate the document with the target because it has already been done.
+ */
+- (void)filterUpdatesFromTargetChange:(FSTTargetChange *)targetChange
+                    existingDocuments:(FSTDocumentKeySet *)existingDocuments;
 
 @end
 
