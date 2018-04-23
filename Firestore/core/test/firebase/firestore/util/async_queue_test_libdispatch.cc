@@ -25,33 +25,59 @@ namespace firebase {
 namespace firestore {
 namespace util {
 
-INSTANTIATE_TEST_CASE_P(AsyncQueueLibdispatch,
-                        AsyncQueueTest,
-                        ::testing::Values(new internal::ExecutorLibdispatch{
-                      dispatch_queue_create("AsyncQueueTests",
-                                         DISPATCH_QUEUE_SERIAL)    }));
+namespace {
 
-// : underlying_queue{dispatch_queue_create("AsyncQueueTests",
-//                                          DISPATCH_QUEUE_SERIAL)},
-// const dispatch_queue_t underlying_queue;
+dispatch_queue_t CreateDispatchQueue() {
+  return dispatch_queue_create("AsyncQueueTests", DISPATCH_QUEUE_SERIAL);
+}
 
-// TEST_P(AsyncQueueTest, SameQueueIsAllowedForUnownedActions) {
-//   internal::DispatchAsync(underlying_queue, [this] {
-//     queue.Enqueue([this] { signal_finished(); });
-//   });
-// EXPECT_TRUE(WaitForTestToFinish());
-// }
+internal::Executor* CreateExecutorLibdispatch(const dispatch_queue_t queue) {
+  return new internal::ExecutorLibdispatch{queue};
+}
 
-// TEST_P(AsyncQueueTest, VerifyCalledFromOperationRequiresOperationInProgress)
-// {
-//   internal::DispatchSync(underlying_queue, [this] {
-//     EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
-//   });
-// }
+}  // namespace
 
-// TEST_P(AsyncQueueTest, VerifyCalledFromOperationRequiresBeingCalledAsync) {
-//   ASSERT_NE(underlying_queue, dispatch_get_main_queue());
-//   EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
-// }
+INSTANTIATE_TEST_CASE_P(
+    AsyncQueueLibdispatch,
+    AsyncQueueTest,
+    ::testing::Values(CreateExecutorLibdispatch(CreateDispatchQueue())));
 
-}}}
+class AsyncQueueTestLibdispatchOnly : public TestWithTimeoutMixin,
+                                      public ::testing::Test {
+ public:
+  AsyncQueueTestLibdispatchOnly()
+      : underlying_queue{CreateDispatchQueue()},
+        queue{std::unique_ptr<internal::Executor>(
+            CreateExecutorLibdispatch(underlying_queue))} {
+  }
+
+  dispatch_queue_t underlying_queue;
+  AsyncQueue queue;
+};
+
+// Additional tests to see how libdispatch-based version of `AsyncQueue`
+// interacts with raw usage of libdispatch.
+
+TEST_F(AsyncQueueTestLibdispatchOnly, SameQueueIsAllowedForUnownedActions) {
+  internal::DispatchAsync(underlying_queue, [this] {
+    queue.Enqueue([this] { signal_finished(); });
+  });
+  EXPECT_TRUE(WaitForTestToFinish());
+}
+
+TEST_F(AsyncQueueTestLibdispatchOnly,
+       VerifyCalledFromOperationRequiresOperationInProgress) {
+  internal::DispatchSync(underlying_queue, [this] {
+    EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
+  });
+}
+
+TEST_F(AsyncQueueTestLibdispatchOnly,
+       VerifyCalledFromOperationRequiresBeingCalledAsync) {
+  ASSERT_NE(underlying_queue, dispatch_get_main_queue());
+  EXPECT_ANY_THROW(queue.VerifyCalledFromOperation());
+}
+
+}  // namespace util
+}  // namespace firestore
+}  // namespace firebase

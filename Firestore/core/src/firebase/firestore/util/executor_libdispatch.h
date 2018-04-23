@@ -92,11 +92,11 @@ class ExecutorLibdispatch : public Executor {
   bool IsScheduleEmpty() const override;
   TaggedOperation PopFromSchedule() override;
 
- private:
   dispatch_queue_t dispatch_queue() const {
     return dispatch_queue_;
   }
 
+ private:
   // GetLabel functions are guaranteed to never return a "null" string_view
   // (i.e. data() != nullptr).
   absl::string_view GetCurrentQueueLabel() const;

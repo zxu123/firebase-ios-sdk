@@ -28,11 +28,9 @@ namespace firebase {
 namespace firestore {
 namespace util {
 
-class AsyncQueueTest : public ::testing::TestWithParam<internal::Executor*> {
+class TestWithTimeoutMixin {
  public:
-  AsyncQueueTest()
-      : queue{std::unique_ptr<internal::Executor>(GetParam())},
-        signal_finished{[] {}} {
+  TestWithTimeoutMixin() : signal_finished{[] {}} {
   }
 
   // Googletest doesn't contain built-in functionality to block until an async
@@ -45,9 +43,16 @@ class AsyncQueueTest : public ::testing::TestWithParam<internal::Executor*> {
            std::future_status::ready;
   }
 
+  std::packaged_task<void()> signal_finished;
+};
+
+class AsyncQueueTest : public TestWithTimeoutMixin,
+                       public ::testing::TestWithParam<internal::Executor*> {
+ public:
+  AsyncQueueTest() : queue{std::unique_ptr<internal::Executor>(GetParam())} {
+  }
 
   AsyncQueue queue;
-  std::packaged_task<void()> signal_finished;
 };
 
 }  // namespace util
