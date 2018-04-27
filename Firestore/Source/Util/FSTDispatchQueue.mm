@@ -63,6 +63,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 @implementation FSTDispatchQueue {
   std::unique_ptr<AsyncQueue> _impl;
+  ExecutorLibdispatch* _hack;
+}
+
+-(dispatch_queue_t) queue {
+  return _hack->dispatch_queue();
 }
 
 + (instancetype)queueWith:(dispatch_queue_t)dispatchQueue {
@@ -72,7 +77,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)initWithQueue:(dispatch_queue_t)queue {
   if (self = [super init]) {
     // std::unique_ptr<Executor> executor{new ExecutorLibdispatch(queue)};
-    std::unique_ptr<Executor> executor{new ExecutorLibdispatch()};
+    _hack = new ExecutorLibdispatch();
+    std::unique_ptr<Executor> executor{_hack};
     _impl = absl::make_unique<AsyncQueue>(std::move(executor));
   }
   return self;

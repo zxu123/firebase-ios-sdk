@@ -146,11 +146,16 @@ void TimeSlot::RemoveFromSchedule() {
 
 // ExecutorLibdispatch
 
+std::string GenerateName() {
+  return std::string{"com.google.firebase.firestore"} + std::to_string(std::rand());
+}
+
 ExecutorLibdispatch::ExecutorLibdispatch(const dispatch_queue_t dispatch_queue)
     : dispatch_queue_{dispatch_queue} {
 }
 ExecutorLibdispatch::ExecutorLibdispatch()
-    : ExecutorLibdispatch{dispatch_queue_create("com.google.firebase.firestore",
+    // : ExecutorLibdispatch{dispatch_queue_create("com.google.firebase.firestore",
+    : ExecutorLibdispatch{dispatch_queue_create(GenerateName().c_str(),
                                                 DISPATCH_QUEUE_SERIAL)} {
 }
 
