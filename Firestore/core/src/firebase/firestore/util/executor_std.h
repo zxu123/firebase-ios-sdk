@@ -210,6 +210,8 @@ class ExecutorStd : public Executor {
   ExecutorStd();
   ~ExecutorStd();
 
+  void Drain() override {}
+
   void Execute(Operation&& operation) override;
   void ExecuteBlocking(Operation&& operation) override;
 

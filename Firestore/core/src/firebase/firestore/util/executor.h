@@ -83,6 +83,7 @@ class Executor {
 
   virtual ~Executor() {
   }
+  virtual void Drain() = 0;
 
   // Schedules the `operation` to be asynchronously executed as soon as
   // possible, in FIFO order.

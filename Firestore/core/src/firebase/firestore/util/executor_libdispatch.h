@@ -79,6 +79,7 @@ class ExecutorLibdispatch : public Executor {
   ExecutorLibdispatch();
   explicit ExecutorLibdispatch(dispatch_queue_t dispatch_queue);
   ~ExecutorLibdispatch();
+  void Drain() override;
 
   bool IsCurrentExecutor() const override;
   std::string CurrentExecutorName() const override;
@@ -108,6 +109,8 @@ class ExecutorLibdispatch : public Executor {
   // Stores non-owned pointers to `TimeSlot`s.
   // Invariant: if a `TimeSlot` is in `schedule_`, it's a valid pointer.
   std::vector<TimeSlot*> schedule_;
+
+  std::string name_;
 };
 
 }  // namespace internal

@@ -32,6 +32,12 @@ AsyncQueue::AsyncQueue(std::unique_ptr<Executor> executor)
   is_operation_in_progress_ = false;
 }
 
+AsyncQueue::~AsyncQueue() {
+  // Drain the executor, lest it has any references to this `AsyncQueue` that it
+  // might access in its destructor.
+  executor_->Drain();
+}
+
 void AsyncQueue::VerifyIsAsyncCall() const {
   FIREBASE_ASSERT_MESSAGE(
       executor_->IsCurrentExecutor(),

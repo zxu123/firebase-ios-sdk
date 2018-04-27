@@ -77,6 +77,7 @@ class AsyncQueue {
   using Milliseconds = internal::Executor::Milliseconds;
 
   explicit AsyncQueue(std::unique_ptr<internal::Executor> executor);
+  ~AsyncQueue();
 
   // Asserts for the caller that it is being invoked as part of an operation on
   // the `AsyncQueue`.
@@ -156,3 +157,5 @@ class AsyncQueue {
 }  // namespace firebase
 
 #endif  // FIRESTORE_CORE_SRC_FIREBASE_FIRESTORE_UTIL_ASYNC_QUEUE_H_
+
+
