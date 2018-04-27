@@ -103,7 +103,8 @@ class ExecutorLibdispatch : public Executor {
   absl::string_view GetCurrentQueueLabel() const;
   absl::string_view GetTargetQueueLabel() const;
 
-  std::atomic<dispatch_queue_t> dispatch_queue_;
+  // std::atomic<dispatch_queue_t> dispatch_queue_;
+  dispatch_queue_t dispatch_queue_;
   // Stores non-owned pointers to `TimeSlot`s.
   // Invariant: if a `TimeSlot` is in `schedule_`, it's a valid pointer.
   std::vector<TimeSlot*> schedule_;
