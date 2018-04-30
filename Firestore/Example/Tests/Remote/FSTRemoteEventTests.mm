@@ -18,6 +18,7 @@
 
 #import <XCTest/XCTest.h>
 
+#import "Firestore/Source/Core/FSTQuery.h"
 #import "Firestore/Source/Local/FSTQueryData.h"
 #import "Firestore/Source/Model/FSTDocument.h"
 #import "Firestore/Source/Model/FSTDocumentKey.h"
@@ -581,14 +582,17 @@ NS_ASSUME_NONNULL_BEGIN
   FSTDeletedDocument *expected =
       [FSTDeletedDocument documentWithKey:synthesized version:event.snapshotVersion];
   XCTAssertEqualObjects(expected, event.documentUpdates.at(synthesized));
+  XCTAssertTrue([event.limboDocumentChanges containsObject:synthesized]);
 
-  DocumentKey notSynthesized1 = DocumentKey::FromPathString("docs/no1");
-  [event synthesizeDeleteForLimboTargetChange:event.targetChanges[@2] key:notSynthesized1];
-  XCTAssertEqual(event.documentUpdates.find(notSynthesized1), event.documentUpdates.end());
+  DocumentKey notSynthesized = DocumentKey::FromPathString("docs/no1");
+  [event synthesizeDeleteForLimboTargetChange:event.targetChanges[@2] key:notSynthesized];
+  XCTAssertEqual(event.documentUpdates.find(notSynthesized), event.documentUpdates.end());
+  XCTAssertFalse([event.limboDocumentChanges containsObject:notSynthesized]);
 
   [event synthesizeDeleteForLimboTargetChange:event.targetChanges[@3] key:doc.key];
   FSTMaybeDocument *docData = event.documentUpdates.at(doc.key);
   XCTAssertFalse([docData isKindOfClass:[FSTDeletedDocument class]]);
+  XCTAssertFalse([event.limboDocumentChanges containsObject:doc.key]);
 }
 
 - (void)testFilterUpdates {
@@ -667,7 +671,7 @@ NS_ASSUME_NONNULL_BEGIN
 
   NSMutableDictionary<NSNumber *, FSTQueryData *> *listens = [NSMutableDictionary dictionary];
   listens[@1] = [FSTQueryData alloc];
-  listens[@2] = [[FSTQueryData alloc] initWithQuery:nil
+  listens[@2] = [[FSTQueryData alloc] initWithQuery:[FSTQuery alloc]
                                            targetID:2
                                listenSequenceNumber:1000
                                             purpose:FSTQueryPurposeLimboResolution];

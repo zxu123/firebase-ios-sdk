@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#import <GoogleToolboxForMac/GTMNSDictionary+URLArguments.h>
 #import <OCMock/OCMock.h>
 #import <XCTest/XCTest.h>
 
@@ -32,8 +31,10 @@
 #import "FIRAuthGlobalWorkQueue.h"
 #import "FIRAuthNotificationManager.h"
 #import "FIRAuthRequestConfiguration.h"
+#import "FIRAuthSettings.h"
 #import "FIRAuthUIDelegate.h"
 #import "FIRAuthURLPresenter.h"
+#import "FIRAuthWebUtils.h"
 #import "FIRGetProjectConfigRequest.h"
 #import "FIRGetProjectConfigResponse.h"
 #import "FIRSendVerificationCodeRequest.h"
@@ -362,6 +363,80 @@ static const NSTimeInterval kExpectationTimeout = 2;
   OCMVerifyAll(_mockAppCredentialManager);
 }
 
+/** @fn testVerifyPhoneNumberInTestMode
+    @brief Tests a successful invocation of @c verifyPhoneNumber:completion: when app verification
+        is disabled.
+ */
+- (void)testVerifyPhoneNumberInTestMode {
+  // Disable app verification.
+  FIRAuthSettings *settings = [[FIRAuthSettings alloc] init];
+  settings.appVerificationDisabledForTesting = YES;
+  OCMStub([_mockAuth settings]).andReturn(settings);
+  OCMExpect([_mockNotificationManager checkNotificationForwardingWithCallback:OCMOCK_ANY])
+      .andCallBlock1(^(FIRAuthNotificationForwardingCallback callback) { callback(YES); });
+  OCMExpect([_mockBackend sendVerificationCode:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRSendVerificationCodeRequest *request,
+                       FIRSendVerificationCodeResponseCallback callback) {
+    XCTAssertEqualObjects(request.phoneNumber, kTestPhoneNumber);
+    // Assert that the app credential is nil when in test mode.
+    XCTAssertNil(request.appCredential);
+    dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+      id mockSendVerificationCodeResponse = OCMClassMock([FIRSendVerificationCodeResponse class]);
+      OCMStub([mockSendVerificationCodeResponse verificationID]).andReturn(kTestVerificationID);
+      callback(mockSendVerificationCodeResponse, nil);
+    });
+  });
+
+  XCTestExpectation *expectation = [self expectationWithDescription:@"callback"];
+  [_provider verifyPhoneNumber:kTestPhoneNumber
+                    completion:^(NSString *_Nullable verificationID, NSError *_Nullable error) {
+    XCTAssertTrue([NSThread isMainThread]);
+    XCTAssertNil(error);
+    XCTAssertEqualObjects(verificationID, kTestVerificationID);
+    [expectation fulfill];
+  }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+  OCMVerifyAll(_mockBackend);
+  OCMVerifyAll(_mockNotificationManager);
+  OCMVerifyAll(_mockAppCredentialManager);
+}
+
+/** @fn testVerifyPhoneNumberInTestModeFailure
+    @brief Tests a failed invocation of @c verifyPhoneNumber:completion: when app verification
+        is disabled.
+ */
+- (void)testVerifyPhoneNumberInTestModeFailure {
+  // Disable app verification.
+  FIRAuthSettings *settings = [[FIRAuthSettings alloc] init];
+  settings.appVerificationDisabledForTesting = YES;
+  OCMStub([_mockAuth settings]).andReturn(settings);
+  OCMExpect([_mockNotificationManager checkNotificationForwardingWithCallback:OCMOCK_ANY])
+      .andCallBlock1(^(FIRAuthNotificationForwardingCallback callback) { callback(YES); });
+  OCMExpect([_mockBackend sendVerificationCode:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRSendVerificationCodeRequest *request,
+                       FIRSendVerificationCodeResponseCallback callback) {
+    XCTAssertEqualObjects(request.phoneNumber, kTestPhoneNumber);
+    // Assert that the app credential is nil when in test mode.
+    XCTAssertNil(request.appCredential);
+    dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+      callback(nil, [FIRAuthErrorUtils networkErrorWithUnderlyingError:[NSError new]]);
+    });
+  });
+
+  XCTestExpectation *expectation = [self expectationWithDescription:@"callback"];
+  [_provider verifyPhoneNumber:kTestPhoneNumber
+                    completion:^(NSString *_Nullable verificationID, NSError *_Nullable error) {
+    XCTAssertTrue([NSThread isMainThread]);
+    XCTAssertNil(verificationID);
+    XCTAssertEqual(error.code, FIRAuthErrorCodeNetworkError);
+    [expectation fulfill];
+  }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+  OCMVerifyAll(_mockBackend);
+  OCMVerifyAll(_mockNotificationManager);
+  OCMVerifyAll(_mockAppCredentialManager);
+}
+
 /** @fn testVerifyPhoneNumberUIDelegate
     @brief Tests a successful invocation of @c verifyPhoneNumber:UIDelegate:completion:.
  */
@@ -409,12 +484,19 @@ static const NSTimeInterval kExpectationTimeout = 2;
     XCTAssertEqualObjects(presentURL.scheme, @"https");
     XCTAssertEqualObjects(presentURL.host, kFakeAuthorizedDomain);
     XCTAssertEqualObjects(presentURL.path, @"/__/auth/handler");
-    NSDictionary *params = [NSDictionary gtm_dictionaryWithHttpArgumentsString:presentURL.query];
-    XCTAssertEqualObjects(params[@"ibi"], kFakeBundleID);
-    XCTAssertEqualObjects(params[@"clientId"], kFakeClientID);
-    XCTAssertEqualObjects(params[@"apiKey"], kFakeAPIKey);
-    XCTAssertEqualObjects(params[@"authType"], @"verifyApp");
-    XCTAssertNotNil(params[@"v"]);
+
+    NSURLComponents *actualURLComponents = [NSURLComponents componentsWithURL:presentURL
+                                                      resolvingAgainstBaseURL:NO];
+    NSArray<NSURLQueryItem *> *queryItems = [actualURLComponents queryItems];
+    XCTAssertEqualObjects([FIRAuthWebUtils queryItemValue:@"ibi" from:queryItems],
+                          kFakeBundleID);
+    XCTAssertEqualObjects([FIRAuthWebUtils queryItemValue:@"clientId" from:queryItems],
+                          kFakeClientID);
+    XCTAssertEqualObjects([FIRAuthWebUtils queryItemValue:@"apiKey" from:queryItems],
+                          kFakeAPIKey);
+    XCTAssertEqualObjects([FIRAuthWebUtils queryItemValue:@"authType" from:queryItems],
+                          @"verifyApp");
+    XCTAssertNotNil([FIRAuthWebUtils queryItemValue:@"v" from:queryItems]);
     // `callbackMatcher` is at index 4
     [invocation getArgument:&unretainedArgument atIndex:4];
     FIRAuthURLCallbackMatcher callbackMatcher = unretainedArgument;
@@ -423,7 +505,8 @@ static const NSTimeInterval kExpectationTimeout = 2;
     // Verify that the URL is rejected by the callback matcher without the event ID.
     XCTAssertFalse(callbackMatcher([NSURL URLWithString:redirectURL]));
     [redirectURL appendString:@"%26eventId%3D"];
-    [redirectURL appendString:params[@"eventId"]];
+    [redirectURL appendString:[FIRAuthWebUtils queryItemValue:@"eventId"
+                                                         from:queryItems]];
     NSURLComponents *originalComponents = [[NSURLComponents alloc] initWithString:redirectURL];
     // Verify that the URL is accepted by the callback matcher with the matching event ID.
     XCTAssertTrue(callbackMatcher([originalComponents URL]));

@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include <leveldb/db.h>
 #include <leveldb/write_batch.h>
@@ -32,6 +33,7 @@
 #import "Firestore/Source/Util/FSTAssert.h"
 #include "Firestore/core/src/firebase/firestore/model/document_key.h"
 #include "Firestore/core/src/firebase/firestore/util/ordered_code.h"
+#include "Firestore/core/src/firebase/firestore/model/snapshot_version.h"
 #include "absl/strings/match.h"
 
 NS_ASSUME_NONNULL_BEGIN
@@ -40,6 +42,7 @@ using firebase::firestore::local::LevelDbTransaction;
 using firebase::firestore::util::OrderedCode;
 using Firestore::StringView;
 using firebase::firestore::model::DocumentKey;
+using firebase::firestore::model::SnapshotVersion;
 using leveldb::DB;
 using leveldb::Slice;
 using leveldb::Status;
@@ -76,7 +79,7 @@ FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
    * The last received snapshot version. This is part of `metadata` but we store it separately to
    * avoid extra conversion to/from GPBTimestamp.
    */
-  FSTSnapshotVersion *_lastRemoteSnapshotVersion;
+  SnapshotVersion _lastRemoteSnapshotVersion;
 }
 
 + (nullable FSTPBTargetGlobal *)readTargetMetadataWithTransaction:
@@ -156,13 +159,14 @@ FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
   return self.metadata.highestListenSequenceNumber;
 }
 
-- (FSTSnapshotVersion *)lastRemoteSnapshotVersion {
+- (const SnapshotVersion &)lastRemoteSnapshotVersion {
   return _lastRemoteSnapshotVersion;
 }
 
-- (void)setLastRemoteSnapshotVersion:(FSTSnapshotVersion *)snapshotVersion {
-  _lastRemoteSnapshotVersion = snapshotVersion;
-  self.metadata.lastRemoteSnapshotVersion = [self.serializer encodedVersion:snapshotVersion];
+- (void)setLastRemoteSnapshotVersion:(SnapshotVersion)snapshotVersion {
+  _lastRemoteSnapshotVersion = std::move(snapshotVersion);
+  self.metadata.lastRemoteSnapshotVersion =
+      [self.serializer encodedVersion:_lastRemoteSnapshotVersion];
   _db.currentTransaction->Put([FSTLevelDBTargetGlobalKey key], self.metadata);
 }
 

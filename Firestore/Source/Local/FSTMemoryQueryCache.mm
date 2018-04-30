@@ -16,18 +16,20 @@
 
 #import "Firestore/Source/Local/FSTMemoryQueryCache.h"
 
-#import "FSTMemoryPersistence.h"
+#include <utility>
+
 #import "Firestore/Source/Core/FSTQuery.h"
-#import "Firestore/Source/Core/FSTSnapshotVersion.h"
+#import "Firestore/Source/Local/FSTDocumentReference.h"
+#import "Firestore/Source/Local/FSTMemoryPersistence.h"
 #import "Firestore/Source/Local/FSTQueryData.h"
 #import "Firestore/Source/Local/FSTReferenceSet.h"
 #import "Firestore/Source/Model/FSTDocumentKey.h"
 #import "Firestore/Source/Remote/FSTRemoteEvent.h"
-
 #include "Firestore/core/src/firebase/firestore/model/document_key.h"
-#import "FSTDocumentReference.h"
+#include "Firestore/core/src/firebase/firestore/model/snapshot_version.h"
 
 using firebase::firestore::model::DocumentKey;
+using firebase::firestore::model::SnapshotVersion;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -44,13 +46,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property(nonatomic, assign) FSTListenSequenceNumber highestListenSequenceNumber;
 
-/** The last received snapshot version. */
-@property(nonatomic, strong) FSTSnapshotVersion *lastRemoteSnapshotVersion;
-
 @end
 
 @implementation FSTMemoryQueryCache {
   FSTMemoryPersistence *_persistence;
+  /** The last received snapshot version. */
+  SnapshotVersion _lastRemoteSnapshotVersion;
 }
 
 - (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence {
@@ -58,7 +59,7 @@ NS_ASSUME_NONNULL_BEGIN
     _persistence = persistence;
     _queries = [NSMutableDictionary dictionary];
     _references = [[FSTReferenceSet alloc] init];
-    _lastRemoteSnapshotVersion = [FSTSnapshotVersion noVersion];
+    _lastRemoteSnapshotVersion = SnapshotVersion::None();
   }
   return self;
 }
@@ -76,6 +77,14 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (FSTListenSequenceNumber)highestListenSequenceNumber {
   return _highestListenSequenceNumber;
+}
+
+- (const SnapshotVersion &)lastRemoteSnapshotVersion {
+  return _lastRemoteSnapshotVersion;
+}
+
+- (void)setLastRemoteSnapshotVersion:(SnapshotVersion)snapshotVersion {
+  _lastRemoteSnapshotVersion = std::move(snapshotVersion);
 }
 
 - (void)addQueryData:(FSTQueryData *)queryData {
@@ -196,7 +205,7 @@ NS_ASSUME_NONNULL_BEGIN
   //self.references.garbageCollector = garbageCollector;
 }
 
-- (BOOL)containsKey:(const firebase::firestore::model::DocumentKey &)key {
+- (BOOL)containsKey:(const DocumentKey &)key {
   // We intentionally ignore orphaned documents here, they are not part of a query and so
   // are not 'contained' by the query cache.
   return [self.references containsKey:key];

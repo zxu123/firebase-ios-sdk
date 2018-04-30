@@ -45,11 +45,13 @@
 #include "Firestore/core/src/firebase/firestore/auth/user.h"
 #include "Firestore/core/src/firebase/firestore/core/target_id_generator.h"
 #include "Firestore/core/src/firebase/firestore/model/document_key.h"
+#include "Firestore/core/src/firebase/firestore/model/snapshot_version.h"
 
 using firebase::firestore::auth::HashUser;
 using firebase::firestore::auth::User;
 using firebase::firestore::core::TargetIdGenerator;
 using firebase::firestore::model::DocumentKey;
+using firebase::firestore::model::SnapshotVersion;
 using firebase::firestore::model::TargetId;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -348,12 +350,12 @@ static const FSTListenSequenceNumber kIrrelevantSequenceNumber = -1;
     FSTDeletedDocument *doc =
         [FSTDeletedDocument documentWithKey:limboKey version:[FSTSnapshotVersion noVersion]];
     FSTDocumentKeySet *limboDocuments = [[FSTDocumentKeySet keySet] setByAddingObject:doc.key];
-    FSTRemoteEvent *event = [FSTRemoteEvent eventWithSnapshotVersion:[FSTSnapshotVersion noVersion]
-                                                       targetChanges:targetChanges
-                                                     documentUpdates:{
-                                                       { limboKey, doc }
-                                                     }
-                                                      limboDocuments:limboDocuments];
+    FSTRemoteEvent *event = [[FSTRemoteEvent alloc] initWithSnapshotVersion:SnapshotVersion::None()
+                                                              targetChanges:targetChanges
+                                                            documentUpdates:{
+                                                              { limboKey, doc }
+                                                            }
+                                                             limboDocuments:limboDocuments];
     [self applyRemoteEvent:event];
   } else {
     FSTQueryView *queryView = self.queryViewsByTarget[@(targetID)];

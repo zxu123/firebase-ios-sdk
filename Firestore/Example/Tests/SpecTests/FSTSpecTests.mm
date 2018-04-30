@@ -606,7 +606,7 @@ NSString *const kNoLRUTag = @"no-lru";
     FSTQueryData *actual = actualTargets[targetID];
     XCTAssertEqualObjects(actual.query, queryData.query);
     XCTAssertEqual(actual.targetID, queryData.targetID);
-    XCTAssertEqualObjects(actual.snapshotVersion, queryData.snapshotVersion);
+    XCTAssertEqual(actual.snapshotVersion, queryData.snapshotVersion);
     XCTAssertEqualObjects(actual.resumeToken, queryData.resumeToken);
 
     [actualTargets removeObjectForKey:targetID];
