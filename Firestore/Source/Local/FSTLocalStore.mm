@@ -76,7 +76,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
  * longer retained by the above reference sets and the garbage collector is performing eager
  * collection).
  */
-@property(nonatomic, strong) id<FSTGarbageCollector> garbageCollector;
+//@property(nonatomic, strong) id<FSTGarbageCollector> garbageCollector;
 
 /** Maps a query to the data about that query. */
 @property(nonatomic, strong) id<FSTQueryCache> queryCache;
@@ -105,7 +105,6 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
 }
 
 - (instancetype)initWithPersistence:(id<FSTPersistence>)persistence
-                   garbageCollector:(id<FSTGarbageCollector>)garbageCollector
                         initialUser:(const User &)initialUser {
   if (self = [super init]) {
     _persistence = persistence;
@@ -117,7 +116,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
     _localViewReferences = [[FSTReferenceSet alloc] init];
     [_persistence.referenceDelegate addReferenceSet:_localViewReferences];
 
-    _garbageCollector = garbageCollector;
+    //_garbageCollector = garbageCollector;
     /*[_garbageCollector addGarbageSource:_queryCache];
     [_garbageCollector addGarbageSource:_localViewReferences];
     [_garbageCollector addGarbageSource:_mutationQueue];*/
@@ -175,10 +174,8 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
       "OldBatches",
       [&]() -> NSArray<FSTMutationBatch *> * { return [self.mutationQueue allMutationBatches]; });
 
-  [self.garbageCollector removeGarbageSource:self.mutationQueue];
 
   self.mutationQueue = [self.persistence mutationQueueForUser:user];
-  [self.garbageCollector addGarbageSource:self.mutationQueue];
 
   [self startMutationQueue];
 

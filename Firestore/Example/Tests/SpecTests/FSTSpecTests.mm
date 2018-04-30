@@ -88,23 +88,13 @@ NSString *const kNoLRUTag = @"no-lru";
   NSNumber *GCEnabled = config[@"useGarbageCollection"];
   self.GCEnabled = [GCEnabled boolValue];
   self.driverPersistence = [self persistence:self.GCEnabled];
-  self.driver = [[FSTSyncEngineTestDriver alloc] initWithPersistence:self.driverPersistence
-                                                    garbageCollector:self.garbageCollector];
+  self.driver = [[FSTSyncEngineTestDriver alloc] initWithPersistence:self.driverPersistence];
   [self.driver start];
 }
 
 - (void)tearDownForSpec {
   [self.driver shutdown];
   [self.driverPersistence shutdown];
-}
-
-/**
- * Creates the appropriate garbage collector for the test configuration: an eager collector if
- * GC is enabled or a no-op collector otherwise.
- */
-- (id<FSTGarbageCollector>)garbageCollector {
-  return self.GCEnabled ? [[FSTEagerGarbageCollector alloc] init]
-                        : [[FSTNoOpGarbageCollector alloc] init];
 }
 
 /**
@@ -395,7 +385,6 @@ NSString *const kNoLRUTag = @"no-lru";
   // re-create FSTMemoryPersistence without losing all persisted state).
 
   self.driver = [[FSTSyncEngineTestDriver alloc] initWithPersistence:self.driverPersistence
-                                                    garbageCollector:self.garbageCollector
                                                          initialUser:currentUser
                                                    outstandingWrites:outstandingWrites];
   [self.driver start];

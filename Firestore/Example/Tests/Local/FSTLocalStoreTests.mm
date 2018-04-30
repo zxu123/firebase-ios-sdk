@@ -69,9 +69,7 @@ NS_ASSUME_NONNULL_BEGIN
 
   id<FSTPersistence> persistence = [self persistence];
   self.localStorePersistence = persistence;
-  id<FSTGarbageCollector> garbageCollector = [[FSTEagerGarbageCollector alloc] init];
   self.localStore = [[FSTLocalStore alloc] initWithPersistence:persistence
-                                              garbageCollector:garbageCollector
                                                    initialUser:User::Unauthenticated()];
   [self.localStore start];
 
