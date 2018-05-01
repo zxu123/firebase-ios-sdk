@@ -148,6 +148,11 @@ NS_ASSUME_NONNULL_BEGIN
   return self;
 }
 
+- (void)dealloc {
+  [self.workerDispatchQueue clear];
+  [self.userDispatchQueue clear];
+}
+
 - (void)initializeWithUser:(const User &)user usePersistence:(BOOL)usePersistence {
   // Do all of our initialization on our own dispatch queue.
   [self.workerDispatchQueue verifyIsCurrentQueue];

@@ -40,33 +40,42 @@ namespace internal {
 // interface: accepts an arbitrary invocable object in place of an Objective-C
 // block.
 template <typename Work>
-void DispatchAsync(const dispatch_queue_t queue, Work&& work) {
+void DispatchAsync(const dispatch_queue_t queue, Work&& work, const std::string& tag) {
   using Func = std::function<void()>;
 
   // Wrap the passed invocable object into a std::function. It's dynamically
   // allocated to make sure the object is valid by the time libdispatch gets to
   // it.
-  const auto wrap = new Func(std::forward<Work>(work));
+  struct Wrap {
+    std::string tag;
+    Func func;
+  };
+  Wrap* wrap = new Wrap{tag, work};
 
   dispatch_async_f(queue, wrap, [](void* const raw_work) {
-    const auto unwrap = static_cast<Func*>(raw_work);
-    (*unwrap)();
+    const auto unwrap = static_cast<Wrap*>(raw_work);
+    unwrap->func();
+    const auto copy_tag = unwrap->tag;
+    (void)copy_tag;
     delete unwrap;
   });
 }
 
 // Similar to `DispatchAsync` but wraps `dispatch_sync_f`.
 template <typename Work>
-void DispatchSync(const dispatch_queue_t queue, Work&& work) {
+void DispatchSync(const dispatch_queue_t queue, Work&& work, const std::string& tag) {
   using Func = std::function<void()>;
 
   // Unlike dispatch_async_f, dispatch_sync_f blocks until the work passed to it
   // is done, so passing a pointer to a local variable is okay.
-  Func wrap{std::forward<Work>(work)};
+  struct Wrap {
+    std::string tag;
+    Func func;
+  } wrap{tag, work};
 
   dispatch_sync_f(queue, &wrap, [](void* const raw_work) {
-    const auto unwrap = static_cast<Func*>(raw_work);
-    (*unwrap)();
+    const auto unwrap = static_cast<Wrap*>(raw_work);
+    unwrap->func();
   });
 }
 
@@ -110,8 +119,30 @@ class ExecutorLibdispatch : public Executor {
   // Invariant: if a `TimeSlot` is in `schedule_`, it's a valid pointer.
   std::vector<TimeSlot*> schedule_;
 
+ public:
   std::string name_;
 };
+
+inline std::string GenerateName(const bool update = true) {
+  static std::string last_name = std::string{"com.google.firebase.firestore"};
+  if (update) {
+    last_name = std::string{"com.google.firebase.firestore"} +
+                std::to_string(std::rand());
+  }
+  return last_name;
+}
+
+ExecutorLibdispatch::ExecutorLibdispatch(const dispatch_queue_t dispatch_queue)
+    : dispatch_queue_{dispatch_queue} {
+  name_ = GenerateName();
+}
+ExecutorLibdispatch::ExecutorLibdispatch()
+    // :
+    // ExecutorLibdispatch{dispatch_queue_create("com.google.firebase.firestore",
+    : ExecutorLibdispatch{dispatch_queue_create(GenerateName(true).c_str(),
+                                                DISPATCH_QUEUE_SERIAL)} {
+  name_ = GenerateName(false);
+}
 
 }  // namespace internal
 }  // namespace util

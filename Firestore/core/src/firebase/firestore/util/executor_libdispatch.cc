@@ -16,6 +16,8 @@
 
 #include "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
 
+#include <iostream>
+
 namespace firebase {
 namespace firestore {
 namespace util {
@@ -33,7 +35,7 @@ void RunSynchronized(const ExecutorLibdispatch* const executor, Work&& work) {
   if (executor->IsCurrentExecutor()) {
     work();
   } else {
-    DispatchSync(executor->dispatch_queue(), std::forward<Work>(work));
+    DispatchSync(executor->dispatch_queue(), std::forward<Work>(work), executor->name_);
   }
 }
 
@@ -146,28 +148,10 @@ void TimeSlot::RemoveFromSchedule() {
 
 // ExecutorLibdispatch
 
-std::string GenerateName(const bool update = true) {
-  static std::string last_name = std::string{"com.google.firebase.firestore"};
-  if (update) {
-    last_name = std::string{"com.google.firebase.firestore"} +
-                std::to_string(std::rand());
-  }
-  return last_name;
-}
-
-ExecutorLibdispatch::ExecutorLibdispatch(const dispatch_queue_t dispatch_queue)
-    : dispatch_queue_{dispatch_queue} {
-}
-ExecutorLibdispatch::ExecutorLibdispatch()
-    // :
-    // ExecutorLibdispatch{dispatch_queue_create("com.google.firebase.firestore",
-    : ExecutorLibdispatch{dispatch_queue_create(GenerateName(true).c_str(),
-                                                DISPATCH_QUEUE_SERIAL)} {
-  name_ = GenerateName(false);
-}
-
 ExecutorLibdispatch::~ExecutorLibdispatch() {
-  Drain();
+  // std::cout << "EXECUTOR OBCOBCOBCOBCOBCOBCOBCOBCOBCOBC before " << name_ << std::endl;
+  // Drain();
+  // std::cout << "EXECUTOR OBCOBCOBCOBCOBCOBCOBCOBCOBCOBC after " << name_ << std::endl;
 }
 
 void ExecutorLibdispatch::Drain() {
@@ -191,10 +175,10 @@ std::string ExecutorLibdispatch::CurrentExecutorName() const {
 }
 
 void ExecutorLibdispatch::Execute(Operation&& operation) {
-  DispatchAsync(dispatch_queue(), std::move(operation));
+  DispatchAsync(dispatch_queue(), std::move(operation), name_);
 }
 void ExecutorLibdispatch::ExecuteBlocking(Operation&& operation) {
-  DispatchSync(dispatch_queue(), std::move(operation));
+  DispatchSync(dispatch_queue(), std::move(operation), name_);
 }
 
 DelayedOperation ExecutorLibdispatch::Schedule(const Milliseconds delay,

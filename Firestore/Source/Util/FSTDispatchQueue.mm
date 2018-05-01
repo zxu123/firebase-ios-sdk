@@ -21,9 +21,10 @@
 
 #import "Firestore/Source/Util/FSTAssert.h"
 #import "Firestore/Source/Util/FSTDispatchQueue.h"
+
 #include "Firestore/core/src/firebase/firestore/util/async_queue.h"
 #include "Firestore/core/src/firebase/firestore/util/executor.h"
-#include "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
+#import "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
 #include "absl/memory/memory.h"
 
 #include <type_traits>
@@ -63,22 +64,27 @@ NS_ASSUME_NONNULL_BEGIN
 
 @implementation FSTDispatchQueue {
   std::unique_ptr<AsyncQueue> _impl;
-  ExecutorLibdispatch* _hack;
 }
 
--(dispatch_queue_t) queue {
-  return _hack->dispatch_queue();
-}
+// -(dispatch_queue_t) queue {
+//   return _queue;
+// }
 
 + (instancetype)queueWith:(dispatch_queue_t)dispatchQueue {
   return [[FSTDispatchQueue alloc] initWithQueue:dispatchQueue];
 }
 
+- (void)clear {
+  _impl->Clear();
+}
+
 - (instancetype)initWithQueue:(dispatch_queue_t)queue {
   if (self = [super init]) {
     // std::unique_ptr<Executor> executor{new ExecutorLibdispatch(queue)};
-    _hack = new ExecutorLibdispatch();
-    std::unique_ptr<Executor> executor{_hack};
+    _queue = queue;
+      // (__bridge __nonnull dispatch_queue_t) 
+    auto tmp = new ExecutorLibdispatch(queue);
+    std::unique_ptr<Executor> executor{tmp};
     _impl = absl::make_unique<AsyncQueue>(std::move(executor));
   }
   return self;

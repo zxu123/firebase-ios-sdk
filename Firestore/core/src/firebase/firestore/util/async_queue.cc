@@ -18,8 +18,11 @@
 
 #include <utility>
 
+#include "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
 #include "Firestore/core/src/firebase/firestore/util/firebase_assert.h"
 #include "absl/memory/memory.h"
+
+#include <iostream>
 
 namespace firebase {
 namespace firestore {
@@ -35,6 +38,18 @@ AsyncQueue::AsyncQueue(std::unique_ptr<Executor> executor)
 AsyncQueue::~AsyncQueue() {
   // Drain the executor, lest it has any references to this `AsyncQueue` that it
   // might access in its destructor.
+  // std::cout
+  //     << "ASYNCQUEUE OBCOBCOBCOBCOBCOBCOBCOBCOBCOBC before "
+  //     << static_cast<internal::ExecutorLibdispatch*>(executor_.get())->name_
+  //     << std::endl;
+  // executor_->Drain();
+  // std::cout
+  //     << "ASYNCQUEUE OBCOBCOBCOBCOBCOBCOBCOBCOBCOBC after "
+  //     << static_cast<internal::ExecutorLibdispatch*>(executor_.get())->name_
+  //     << std::endl;
+}
+
+void AsyncQueue::Clear() {
   executor_->Drain();
 }
 

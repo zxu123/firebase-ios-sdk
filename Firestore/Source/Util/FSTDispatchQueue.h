@@ -131,6 +131,8 @@ typedef NS_ENUM(NSInteger, FSTTimerID) {
  */
 - (BOOL)containsDelayedCallbackWithTimerID:(FSTTimerID)timerID;
 
+- (void)clear;
+
 /**
  * For Tests: Runs delayed callbacks early, blocking until completion.
  *
