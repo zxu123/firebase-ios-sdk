@@ -60,9 +60,6 @@ FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
 }
 }
 
-@interface FSTLevelDBLRUReferenceDelegate : NSObject<FSTReferenceDelegate>
-@end
-
 @interface FSTLevelDBQueryCache ()
 
 /** A write-through cached copy of the metadata for the query cache. */
@@ -367,17 +364,6 @@ FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
 
 #pragma mark Matching Key tracking
 
-- (void)addPotentiallyOrphanedDocuments:(FSTDocumentKeySet *)keys
-                       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
-  std::string encodedSequenceNumber;
-  OrderedCode::WriteSignedNumIncreasing(&encodedSequenceNumber, sequenceNumber);
-  [keys enumerateObjectsUsingBlock:^(FSTDocumentKey *documentKey, BOOL *stop) {
-    self->_db.currentTransaction->Put(
-        [FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:documentKey],
-        encodedSequenceNumber);
-  }];
-}
-
 - (void)addMatchingKeys:(FSTDocumentKeySet *)keys
             forTargetID:(FSTTargetID)targetID
        atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
@@ -385,8 +371,6 @@ FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
   // future if we wanted to store some other kind of value here, we can parse these empty values as
   // with some other protocol buffer (and the parser will see all default values).
   std::string emptyBuffer;
-  std::string encodedSequenceNumber;
-  OrderedCode::WriteSignedNumIncreasing(&encodedSequenceNumber, sequenceNumber);
   [keys enumerateObjectsUsingBlock:^(FSTDocumentKey *documentKey, BOOL *stop) {
     self->_db.currentTransaction->Put(
         [FSTLevelDBTargetDocumentKey keyWithTargetID:targetID documentKey:documentKey],
@@ -394,10 +378,7 @@ FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
     self->_db.currentTransaction->Put(
         [FSTLevelDBDocumentTargetKey keyWithDocumentKey:documentKey targetID:targetID],
         emptyBuffer);
-    // TODO(gsoltis): this should go in reference delegate.
-    self->_db.currentTransaction->Put(
-        [FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:documentKey],
-        encodedSequenceNumber);
+    [self->_db.referenceDelegate addReference:documentKey target:targetID sequenceNumber:sequenceNumber];
   }];
 }
 
@@ -409,7 +390,7 @@ FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
         [FSTLevelDBTargetDocumentKey keyWithTargetID:targetID documentKey:key]);
     self->_db.currentTransaction->Delete(
         [FSTLevelDBDocumentTargetKey keyWithDocumentKey:key targetID:targetID]);
-    [self.garbageCollector addPotentialGarbageKey:key];
+    [self->_db.referenceDelegate removeReference:key target:targetID sequenceNumber:sequenceNumber];
   }];
 }
 

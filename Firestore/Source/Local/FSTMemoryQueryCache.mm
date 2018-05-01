@@ -163,7 +163,7 @@ NS_ASSUME_NONNULL_BEGIN
           atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
   [self.references removeReferencesToKeys:keys forID:targetID];
   [keys enumerateObjectsUsingBlock:^(FSTDocumentKey *key, BOOL *stop) {
-    [_persistence.referenceDelegate removeReference:key
+    [self->_persistence.referenceDelegate removeReference:key
                                              target:targetID
                                      sequenceNumber:sequenceNumber];
   }];

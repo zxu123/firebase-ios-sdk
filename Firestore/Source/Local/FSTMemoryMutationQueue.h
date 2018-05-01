@@ -29,9 +29,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (long)byteSize;
 
-/** The garbage collector to notify about potential garbage keys. */
-@property(nonatomic, weak, readwrite, nullable) id<FSTGarbageCollector> garbageCollector;
-
 @end
 
 NS_ASSUME_NONNULL_END

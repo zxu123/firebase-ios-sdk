@@ -16,11 +16,10 @@
 
 #import <Foundation/Foundation.h>
 
+#import "Firestore/Source/Local/FSTLRUGarbageCollector.h"
 #import "Firestore/Source/Local/FSTPersistence.h"
 #include "Firestore/core/src/firebase/firestore/model/resource_path.h"
 
-@protocol FSTLRUDelegate;
-@class FSTLRUGarbageCollector;
 @class FSTMaybeDocument;
 @class FSTObjectValue;
 @class FSTReferenceSet;

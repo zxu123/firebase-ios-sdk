@@ -116,11 +116,6 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
     _localViewReferences = [[FSTReferenceSet alloc] init];
     [_persistence.referenceDelegate addInMemoryPins:_localViewReferences];
 
-    //_garbageCollector = garbageCollector;
-    /*[_garbageCollector addGarbageSource:_queryCache];
-    [_garbageCollector addGarbageSource:_localViewReferences];
-    [_garbageCollector addGarbageSource:_mutationQueue];*/
-
     _targetIDs = [NSMutableDictionary dictionary];
     _heldBatchResults = [NSMutableArray array];
 

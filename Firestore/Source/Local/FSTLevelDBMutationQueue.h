@@ -34,9 +34,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)init __attribute__((unavailable("Use a static constructor")));
 
-/** The garbage collector to notify about potential garbage keys. */
-@property(nonatomic, weak, readwrite, nullable) id<FSTGarbageCollector> garbageCollector;
-
 /**
  * Creates a new mutation queue for the given user, in the given LevelDB.
  *

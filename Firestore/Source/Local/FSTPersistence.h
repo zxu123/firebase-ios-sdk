@@ -106,8 +106,6 @@ struct FSTTransactionRunner;
 
 @end
 
-extern const FSTListenSequenceNumber kFSTListenSequenceNumberInvalid;
-
 @protocol FSTReferenceDelegate
 
 - (void)addInMemoryPins:(FSTReferenceSet *)set;

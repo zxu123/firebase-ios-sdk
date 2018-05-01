@@ -273,7 +273,7 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
 - (void)enumerateMutationsUsingBlock:(void (^)(FSTDocumentKey *key, FSTListenSequenceNumber sequenceNumber, BOOL *stop))block {
   [_sequenceNumbers enumerateKeysAndObjectsUsingBlock:^(FSTDocumentKey *key, NSNumber *seq, BOOL *stop) {
     FSTListenSequenceNumber sequenceNumber = [seq longLongValue];
-    if (![_persistence.queryCache containsKey:key]) {
+    if (![self->_persistence.queryCache containsKey:key]) {
       block(key, sequenceNumber, stop);
     }
   }];
@@ -355,7 +355,7 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
 - (void)removeTarget:(FSTQueryData *)queryData
       sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
   [[_persistence.queryCache matchingKeysForTargetID:queryData.targetID] enumerateObjectsUsingBlock:^(FSTDocumentKey *docKey, BOOL *stop) {
-    _orphaned->insert(docKey);
+    self->_orphaned->insert(docKey);
   }];
   [_persistence.queryCache removeQueryData:queryData];
 }

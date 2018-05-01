@@ -6,9 +6,8 @@
 
 @protocol FSTPersistence;
 @protocol FSTQueryCache;
-@protocol FSTSequenceNumberPersistence;
 
-//extern const FSTListenSequenceNumber kFSTListenSequenceNumberInvalid;
+extern const FSTListenSequenceNumber kFSTListenSequenceNumberInvalid;
 
 struct FSTLRUThreshold {
   long min_ms_since_start;

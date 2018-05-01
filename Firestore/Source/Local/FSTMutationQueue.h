@@ -31,7 +31,7 @@ NS_ASSUME_NONNULL_BEGIN
 #pragma mark - FSTMutationQueue
 
 /** A queue of mutations to apply to the remote store. */
-@protocol FSTMutationQueue <NSObject, FSTGarbageSource>
+@protocol FSTMutationQueue <NSObject>
 
 /**
  * Starts the mutation queue, performing any initial reads that might be required to establish
@@ -148,6 +148,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 /** Performs a consistency check, examining the mutation queue for any leaks, if possible. */
 - (void)performConsistencyCheck;
+
+- (BOOL)containsKey:(const firebase::firestore::model::DocumentKey&)key;
 
 @end
 

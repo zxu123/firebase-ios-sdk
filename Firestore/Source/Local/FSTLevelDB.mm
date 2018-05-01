@@ -94,6 +94,18 @@ using leveldb::WriteOptions;
   [_db.queryCache updateQueryData:updated];
 }
 
+- (void)addReference:(FSTDocumentKey *)key
+              target:(__unused FSTTargetID)targetID
+      sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  [self writeSentinelForKey:key sequenceNumber:sequenceNumber];
+}
+
+- (void)removeReference:(FSTDocumentKey *)key
+                 target:(__unused FSTTargetID)targetID
+         sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+  [self writeSentinelForKey:key sequenceNumber:sequenceNumber];
+}
+
 
 - (BOOL)mutationQueuesContainKey:(FSTDocumentKey *)docKey {
   const std::set<std::string>& users = _db.users;
@@ -139,7 +151,7 @@ using leveldb::WriteOptions;
     if (sequenceNumber <= upperBound) {
       if (![self isPinned:docKey]) {
         count++;
-        [_db.remoteDocumentCache removeEntryForKey:docKey];
+        [self->_db.remoteDocumentCache removeEntryForKey:docKey];
       }
     }
   }];

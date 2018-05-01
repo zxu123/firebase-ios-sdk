@@ -36,7 +36,7 @@ NS_ASSUME_NONNULL_BEGIN
  *
  * The cache is keyed by FSTQuery and entries in the cache are FSTQueryData instances.
  */
-@protocol FSTQueryCache <NSObject, FSTGarbageSource>
+@protocol FSTQueryCache <NSObject>
 
 /** Starts the query cache up. */
 - (void)start;
@@ -125,6 +125,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)removeMatchingKeysForTargetID:(FSTTargetID)targetID;
 
 - (FSTDocumentKeySet *)matchingKeysForTargetID:(FSTTargetID)targetID;
+
+- (BOOL)containsKey:(const firebase::firestore::model::DocumentKey&)key;
 
 @end
 
