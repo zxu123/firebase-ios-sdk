@@ -30,9 +30,11 @@
 #import "Firestore/Source/Util/FSTClasses.h"
 #include "Firestore/core/src/firebase/firestore/auth/user.h"
 #include "Firestore/core/src/firebase/firestore/model/precondition.h"
+#include "Firestore/core/test/firebase/firestore/testutil/testutil.h"
 
 using firebase::firestore::auth::User;
 using firebase::firestore::model::Precondition;
+namespace testutil = firebase::firestore::testutil;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -99,7 +101,7 @@ NS_ASSUME_NONNULL_BEGIN
   BOOL hasMutations = NO;
   return [FSTDocument documentWithData:value
                                    key:key
-                               version:FSTTestVersion(version)
+                               version:testutil::Version(version)
                      hasLocalMutations:hasMutations];
 }
 
@@ -593,7 +595,7 @@ NS_ASSUME_NONNULL_BEGIN
     FSTTestSnapshotVersion version = 3;
     FSTDocument *doc = [FSTDocument documentWithData:_testValue
                                                  key:middleDocToUpdate
-                                             version:FSTTestVersion(version)
+                                             version:testutil::Version(version)
                                    hasLocalMutations:NO];
     [documentCache addEntry:doc];
     NSData *token = [@"updated" dataUsingEncoding:NSUTF8StringEncoding];

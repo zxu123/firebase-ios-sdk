@@ -57,7 +57,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
-@interface FSTMemoryEagerReferenceDelegate : NSObject <FSTReferenceDelegate>
+@interface FSTMemoryEagerReferenceDelegate : NSObject <FSTReferenceDelegate, FSTTransactional>
 
 - (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence;
 

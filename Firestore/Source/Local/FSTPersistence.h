@@ -108,9 +108,9 @@ struct FSTTransactionRunner;
 
 extern const FSTListenSequenceNumber kFSTListenSequenceNumberInvalid;
 
-@protocol FSTReferenceDelegate<FSTTransactional>
+@protocol FSTReferenceDelegate
 
-- (void)addReferenceSet:(FSTReferenceSet *)set;
+- (void)addInMemoryPins:(FSTReferenceSet *)set;
 
 - (void)removeTarget:(FSTQueryData *)queryData sequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
 

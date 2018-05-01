@@ -70,10 +70,6 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   id<FSTReferenceDelegate> _referenceDelegate;
 }
 
-/*+ (instancetype)persistence {
-  return [[FSTMemoryPersistence alloc] init];
-}*/
-
 + (instancetype)persistenceWithNoGC {
   return [[FSTMemoryPersistence alloc] initWithReferenceBlock:^id <FSTReferenceDelegate>(FSTMemoryPersistence *persistence) {
     return nil;
@@ -158,8 +154,9 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
     _queryCache = [[FSTMemoryQueryCache alloc] initWithPersistence:self];
     _referenceDelegate = block(self);
     _remoteDocumentCache = [[FSTMemoryRemoteDocumentCache alloc] init];
-    if (_referenceDelegate) {
-      _transactionRunner.SetBackingPersistence(_referenceDelegate);
+    id delegate = _referenceDelegate;
+    if ([delegate conformsToProtocol:@protocol(FSTTransactional)]) {
+      _transactionRunner.SetBackingPersistence((id<FSTTransactional>)_referenceDelegate);
     }
   }
   return self;
@@ -241,7 +238,7 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   return _gc;
 }
 
-- (void)addReferenceSet:(FSTReferenceSet *)set {
+- (void)addInMemoryPins:(FSTReferenceSet *)set {
   // Technically can't assert this, due to restartWithNoopGarbageCollector (for now...)
   //FSTAssert(_additionalReferences == nil, @"Overwriting additional references");
   _additionalReferences = set;
@@ -349,7 +346,7 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   return self;
 }
 
-- (void)addReferenceSet:(FSTReferenceSet *)set {
+- (void)addInMemoryPins:(FSTReferenceSet *)set {
   // Technically can't assert this, due to restartWithNoopGarbageCollector (for now...)
   //FSTAssert(_additionalReferences == nil, @"Overwriting additional references");
   _additionalReferences = set;

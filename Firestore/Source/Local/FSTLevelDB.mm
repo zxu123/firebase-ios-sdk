@@ -80,7 +80,7 @@ using leveldb::WriteOptions;
   return self;
 }
 
-- (void)addReferenceSet:(FSTReferenceSet *)set {
+- (void)addInMemoryPins:(FSTReferenceSet *)set {
   // Technically can't assert this, due to restartWithNoopGarbageCollector (for now...)
   //FSTAssert(_additionalReferences == nil, @"Overwriting additional references");
   _additionalReferences = set;

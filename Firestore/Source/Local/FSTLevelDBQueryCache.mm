@@ -394,6 +394,7 @@ FSTListenSequenceNumber ReadSequenceNumber(const absl::string_view &slice) {
     self->_db.currentTransaction->Put(
         [FSTLevelDBDocumentTargetKey keyWithDocumentKey:documentKey targetID:targetID],
         emptyBuffer);
+    // TODO(gsoltis): this should go in reference delegate.
     self->_db.currentTransaction->Put(
         [FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:documentKey],
         encodedSequenceNumber);

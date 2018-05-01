@@ -114,7 +114,7 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
     _localDocuments = [FSTLocalDocumentsView viewWithRemoteDocumentCache:_remoteDocumentCache
                                                            mutationQueue:_mutationQueue];
     _localViewReferences = [[FSTReferenceSet alloc] init];
-    [_persistence.referenceDelegate addReferenceSet:_localViewReferences];
+    [_persistence.referenceDelegate addInMemoryPins:_localViewReferences];
 
     //_garbageCollector = garbageCollector;
     /*[_garbageCollector addGarbageSource:_queryCache];
