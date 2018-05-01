@@ -24,7 +24,6 @@
 
 #import "FIRFirestoreErrors.h"
 #import "Firestore/Source/Core/FSTQuery.h"
-#import "Firestore/Source/Core/FSTSnapshotVersion.h"
 #import "Firestore/Source/Core/FSTTransaction.h"
 #import "Firestore/Source/Core/FSTView.h"
 #import "Firestore/Source/Core/FSTViewSnapshot.h"
@@ -303,8 +302,7 @@ static const FSTListenSequenceNumber kIrrelevantSequenceNumber = -1;
     if (iter == self->_limboKeysByTarget.end()) {
       FSTQueryView *qv = self.queryViewsByTarget[targetID];
       FSTAssert(qv, @"Missing queryview for non-limbo query: %i", [targetID intValue]);
-      [remoteEvent filterUpdatesFromTargetChange:targetChange
-                               existingDocuments:qv.view.syncedDocuments];
+      [targetChange.mapping filterUpdatesUsingExistingKeys:qv.view.syncedDocuments];
     } else {
       [remoteEvent synthesizeDeleteForLimboTargetChange:targetChange key:iter->second];
     }
@@ -348,7 +346,7 @@ static const FSTListenSequenceNumber kIrrelevantSequenceNumber = -1;
     NSMutableDictionary<NSNumber *, FSTTargetChange *> *targetChanges =
         [NSMutableDictionary dictionary];
     FSTDeletedDocument *doc =
-        [FSTDeletedDocument documentWithKey:limboKey version:[FSTSnapshotVersion noVersion]];
+        [FSTDeletedDocument documentWithKey:limboKey version:SnapshotVersion::None()];
     FSTDocumentKeySet *limboDocuments = [[FSTDocumentKeySet keySet] setByAddingObject:doc.key];
     FSTRemoteEvent *event = [[FSTRemoteEvent alloc] initWithSnapshotVersion:SnapshotVersion::None()
                                                               targetChanges:targetChanges

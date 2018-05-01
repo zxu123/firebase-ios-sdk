@@ -16,7 +16,6 @@
 
 #import "Firestore/Example/Tests/SpecTests/FSTMockDatastore.h"
 
-#import "Firestore/Source/Core/FSTSnapshotVersion.h"
 #import "Firestore/Source/Local/FSTQueryData.h"
 #import "Firestore/Source/Model/FSTMutation.h"
 #import "Firestore/Source/Remote/FSTSerializerBeta.h"
@@ -36,6 +35,7 @@ using firebase::firestore::auth::CredentialsProvider;
 using firebase::firestore::auth::EmptyCredentialsProvider;
 using firebase::firestore::core::DatabaseInfo;
 using firebase::firestore::model::DatabaseId;
+using firebase::firestore::model::SnapshotVersion;
 
 @class GRPCProtoCall;
 
@@ -121,7 +121,7 @@ NS_ASSUME_NONNULL_BEGIN
   self.datastore.watchStreamRequestCount += 1;
   // Snapshot version is ignored on the wire
   FSTQueryData *sentQueryData =
-      [query queryDataByReplacingSnapshotVersion:[FSTSnapshotVersion noVersion]
+      [query queryDataByReplacingSnapshotVersion:SnapshotVersion::None()
                                      resumeToken:query.resumeToken
                                   sequenceNumber:query.sequenceNumber];
   self.activeTargets[@(query.targetID)] = sentQueryData;
@@ -139,7 +139,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 #pragma mark - Helper methods.
 
-- (void)writeWatchChange:(FSTWatchChange *)change snapshotVersion:(FSTSnapshotVersion *)snap {
+- (void)writeWatchChange:(FSTWatchChange *)change snapshotVersion:(const SnapshotVersion &)snap {
   if ([change isKindOfClass:[FSTWatchTargetChange class]]) {
     FSTWatchTargetChange *targetChange = (FSTWatchTargetChange *)change;
     if (targetChange.cause) {
@@ -243,7 +243,7 @@ NS_ASSUME_NONNULL_BEGIN
 #pragma mark - Helper methods.
 
 /** Injects a write ack as though it had come from the backend in response to a write. */
-- (void)ackWriteWithVersion:(FSTSnapshotVersion *)commitVersion
+- (void)ackWriteWithVersion:(const SnapshotVersion &)commitVersion
             mutationResults:(NSArray<FSTMutationResult *> *)results {
   [self.delegate writeStreamDidReceiveResponseWithVersion:commitVersion mutationResults:results];
 }
@@ -327,7 +327,7 @@ NS_ASSUME_NONNULL_BEGIN
   return [self.writeStream sentMutationsCount];
 }
 
-- (void)ackWriteWithVersion:(FSTSnapshotVersion *)commitVersion
+- (void)ackWriteWithVersion:(const SnapshotVersion &)commitVersion
             mutationResults:(NSArray<FSTMutationResult *> *)results {
   [self.writeStream ackWriteWithVersion:commitVersion mutationResults:results];
 }
@@ -341,11 +341,11 @@ NS_ASSUME_NONNULL_BEGIN
       [FSTWatchTargetChange changeWithState:FSTWatchTargetChangeStateAdded
                                   targetIDs:targetIDs
                                       cause:nil];
-  [self writeWatchChange:change snapshotVersion:[FSTSnapshotVersion noVersion]];
+  [self writeWatchChange:change snapshotVersion:SnapshotVersion::None()];
 }
 
 - (void)writeWatchCurrentWithTargetIDs:(NSArray<FSTBoxedTargetID *> *)targetIDs
-                       snapshotVersion:(FSTSnapshotVersion *)snapshotVersion
+                       snapshotVersion:(const SnapshotVersion &)snapshotVersion
                            resumeToken:(NSData *)resumeToken {
   FSTWatchTargetChange *change =
       [FSTWatchTargetChange changeWithState:FSTWatchTargetChangeStateCurrent
@@ -354,7 +354,7 @@ NS_ASSUME_NONNULL_BEGIN
   [self writeWatchChange:change snapshotVersion:snapshotVersion];
 }
 
-- (void)writeWatchChange:(FSTWatchChange *)change snapshotVersion:(FSTSnapshotVersion *)snap {
+- (void)writeWatchChange:(FSTWatchChange *)change snapshotVersion:(const SnapshotVersion &)snap {
   [self.watchStream writeWatchChange:change snapshotVersion:snap];
 }
 
