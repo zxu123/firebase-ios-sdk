@@ -132,11 +132,11 @@ inline std::string GenerateName(const bool update = true) {
   return last_name;
 }
 
-ExecutorLibdispatch::ExecutorLibdispatch(const dispatch_queue_t dispatch_queue)
+inline ExecutorLibdispatch::ExecutorLibdispatch(const dispatch_queue_t dispatch_queue)
     : dispatch_queue_{dispatch_queue} {
   name_ = GenerateName();
 }
-ExecutorLibdispatch::ExecutorLibdispatch()
+inline ExecutorLibdispatch::ExecutorLibdispatch()
     // :
     // ExecutorLibdispatch{dispatch_queue_create("com.google.firebase.firestore",
     : ExecutorLibdispatch{dispatch_queue_create(GenerateName(true).c_str(),
