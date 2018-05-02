@@ -77,7 +77,7 @@ class AsyncQueue {
   using Milliseconds = internal::Executor::Milliseconds;
 
   explicit AsyncQueue(std::unique_ptr<internal::Executor> executor);
-  ~AsyncQueue();
+
   void Clear();
 
   // Asserts for the caller that it is being invoked as part of an operation on

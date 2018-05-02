@@ -35,22 +35,8 @@ AsyncQueue::AsyncQueue(std::unique_ptr<Executor> executor)
   is_operation_in_progress_ = false;
 }
 
-AsyncQueue::~AsyncQueue() {
-  // Drain the executor, lest it has any references to this `AsyncQueue` that it
-  // might access in its destructor.
-  // std::cout
-  //     << "ASYNCQUEUE OBCOBCOBCOBCOBCOBCOBCOBCOBCOBC before "
-  //     << static_cast<internal::ExecutorLibdispatch*>(executor_.get())->name_
-  //     << std::endl;
-  // executor_->Drain();
-  // std::cout
-  //     << "ASYNCQUEUE OBCOBCOBCOBCOBCOBCOBCOBCOBCOBC after "
-  //     << static_cast<internal::ExecutorLibdispatch*>(executor_.get())->name_
-  //     << std::endl;
-}
-
 void AsyncQueue::Clear() {
-  executor_->Drain();
+  executor_->Clear();
 }
 
 void AsyncQueue::VerifyIsAsyncCall() const {

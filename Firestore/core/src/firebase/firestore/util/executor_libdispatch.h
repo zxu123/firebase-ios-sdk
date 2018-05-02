@@ -87,8 +87,6 @@ class ExecutorLibdispatch : public Executor {
  public:
   ExecutorLibdispatch();
   explicit ExecutorLibdispatch(dispatch_queue_t dispatch_queue);
-  ~ExecutorLibdispatch();
-  void Drain() override;
 
   bool IsCurrentExecutor() const override;
   std::string CurrentExecutorName() const override;
@@ -102,6 +100,8 @@ class ExecutorLibdispatch : public Executor {
 
   bool IsScheduled(Tag tag) const override;
   absl::optional<TaggedOperation> PopFromSchedule() override;
+
+  void Clear() override;
 
   dispatch_queue_t dispatch_queue() const {
     return dispatch_queue_;

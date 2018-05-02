@@ -149,13 +149,7 @@ void TimeSlot::RemoveFromSchedule() {
 
 // ExecutorLibdispatch
 
-ExecutorLibdispatch::~ExecutorLibdispatch() {
-  // std::cout << "EXECUTOR OBCOBCOBCOBCOBCOBCOBCOBCOBCOBC before " << name_ <<
-  // std::endl; Drain(); std::cout << "EXECUTOR OBCOBCOBCOBCOBCOBCOBCOBCOBCOBC
-  // after " << name_ << std::endl;
-}
-
-void ExecutorLibdispatch::Drain() {
+void ExecutorLibdispatch::Clear() {
   // Turn any operations that might still be in the queue into no-ops, lest
   // they try to access `ExecutorLibdispatch` after it gets destroyed. Because
   // the queue is serial, by the time libdispatch gets to the newly-enqueued

@@ -109,6 +109,11 @@ class Schedule {
     }
   }
 
+  void Clear() {
+    std::lock_guard<std::mutex> lock{mutex_};
+    scheduled_.clear();
+  }
+
   bool empty() const {
     std::lock_guard<std::mutex> lock{mutex_};
     return scheduled_.empty();
@@ -210,8 +215,6 @@ class ExecutorStd : public Executor {
   ExecutorStd();
   ~ExecutorStd();
 
-  void Drain() override {}
-
   void Execute(Operation&& operation) override;
   void ExecuteBlocking(Operation&& operation) override;
 
@@ -223,6 +226,8 @@ class ExecutorStd : public Executor {
 
   bool IsScheduled(Tag tag) const override;
   absl::optional<TaggedOperation> PopFromSchedule() override;
+
+  void Clear() override;
 
  private:
   using TimePoint = async::Schedule<Operation, Milliseconds>::TimePoint;

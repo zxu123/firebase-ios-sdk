@@ -81,10 +81,6 @@ class Executor {
     Operation operation;
   };
 
-  virtual ~Executor() {
-  }
-  virtual void Drain() = 0;
-
   // Schedules the `operation` to be asynchronously executed as soon as
   // possible, in FIFO order.
   virtual void Execute(Operation&& operation) = 0;
@@ -117,6 +113,8 @@ class Executor {
   // execution may be removed. If no such operations are currently scheduled, an
   // empty `optional` is returned.
   virtual absl::optional<TaggedOperation> PopFromSchedule() = 0;
+
+  virtual void Clear() = 0;
 };
 
 }  // namespace internal
