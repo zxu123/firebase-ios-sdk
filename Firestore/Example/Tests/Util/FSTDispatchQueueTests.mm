@@ -253,7 +253,9 @@ static const FSTTimerID timerID3 = FSTTimerIDWriteStreamConnectionBackoff;
   }];
 
   [_queue runDelayedCallbacksUntil:FSTTimerIDAll];
-  XCTAssertEqualObjects(_completedSteps, (@[ @1, @2, @3, @4 ]));
+  [_queue dispatchSync:^{
+    XCTAssertEqualObjects(_completedSteps, (@[ @1, @2, @3, @4 ]));
+  }];
 }
 
 - (void)testCanManuallyDrainSpecificDelayedCallbacksForTesting {
@@ -266,7 +268,9 @@ static const FSTTimerID timerID3 = FSTTimerIDWriteStreamConnectionBackoff;
   }];
 
   [_queue runDelayedCallbacksUntil:timerID3];
-  XCTAssertEqualObjects(_completedSteps, (@[ @1, @2, @3, @4 ]));
+  [_queue dispatchSync:^{
+    XCTAssertEqualObjects(_completedSteps, (@[ @1, @2, @3, @4 ]));
+  }];
 }
 
 @end
