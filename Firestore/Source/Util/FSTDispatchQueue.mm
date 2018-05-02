@@ -24,8 +24,9 @@
 
 #include "Firestore/core/src/firebase/firestore/util/async_queue.h"
 #include "Firestore/core/src/firebase/firestore/util/executor.h"
-#import "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
 #include "absl/memory/memory.h"
+
+#include "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
 
 #include <type_traits>
 
