@@ -35,7 +35,8 @@ void RunSynchronized(const ExecutorLibdispatch* const executor, Work&& work) {
   if (executor->IsCurrentExecutor()) {
     work();
   } else {
-    DispatchSync(executor->dispatch_queue(), std::forward<Work>(work), executor->name_);
+    DispatchSync(executor->dispatch_queue(), std::forward<Work>(work),
+                 executor->name_);
   }
 }
 
@@ -149,9 +150,9 @@ void TimeSlot::RemoveFromSchedule() {
 // ExecutorLibdispatch
 
 ExecutorLibdispatch::~ExecutorLibdispatch() {
-  // std::cout << "EXECUTOR OBCOBCOBCOBCOBCOBCOBCOBCOBCOBC before " << name_ << std::endl;
-  // Drain();
-  // std::cout << "EXECUTOR OBCOBCOBCOBCOBCOBCOBCOBCOBCOBC after " << name_ << std::endl;
+  // std::cout << "EXECUTOR OBCOBCOBCOBCOBCOBCOBCOBCOBCOBC before " << name_ <<
+  // std::endl; Drain(); std::cout << "EXECUTOR OBCOBCOBCOBCOBCOBCOBCOBCOBCOBC
+  // after " << name_ << std::endl;
 }
 
 void ExecutorLibdispatch::Drain() {
@@ -178,6 +179,11 @@ void ExecutorLibdispatch::Execute(Operation&& operation) {
   DispatchAsync(dispatch_queue(), std::move(operation), name_);
 }
 void ExecutorLibdispatch::ExecuteBlocking(Operation&& operation) {
+  FIREBASE_ASSERT_MESSAGE(
+      GetTargetQueueLabel() !=
+          StringViewFromDispatchLabel(
+              dispatch_queue_get_label(dispatch_get_main_queue())),
+      "Calling DispatchSync on the main queue will lead to a deadlock.");
   DispatchSync(dispatch_queue(), std::move(operation), name_);
 }
 
