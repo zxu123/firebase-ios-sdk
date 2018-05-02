@@ -29,7 +29,7 @@
 #include "absl/memory/memory.h"
 #include "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
 
-using firebase::firestore::ExecutorLibdispatch;
+using firebase::firestore::util::internal::ExecutorLibdispatch;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -134,7 +134,7 @@ NS_ASSUME_NONNULL_BEGIN
   FSTDocument *doc2 = FSTTestDoc("rooms/Eros", 4, @{@"name" : @"Eros2"}, NO);
 
   __block FSTAsyncQueryListener *listener = [[FSTAsyncQueryListener alloc]
-      initWithExecutor:_executor
+      initWithExecutor:_executor.get()
             snapshotHandler:^(FSTViewSnapshot *snapshot, NSError *error) {
               [accum addObject:snapshot];
               [listener mute];

@@ -40,7 +40,7 @@ namespace internal {
 // interface: accepts an arbitrary invocable object in place of an Objective-C
 // block.
 template <typename Work>
-void DispatchAsync(const dispatch_queue_t queue, Work&& work, const std::string& tag) {
+void DispatchAsync(const dispatch_queue_t queue, Work&& work, const std::string& tag = "") {
   using Func = std::function<void()>;
 
   // Wrap the passed invocable object into a std::function. It's dynamically
@@ -63,7 +63,7 @@ void DispatchAsync(const dispatch_queue_t queue, Work&& work, const std::string&
 
 // Similar to `DispatchAsync` but wraps `dispatch_sync_f`.
 template <typename Work>
-void DispatchSync(const dispatch_queue_t queue, Work&& work, const std::string& tag) {
+void DispatchSync(const dispatch_queue_t queue, Work&& work, const std::string& tag = "") {
   using Func = std::function<void()>;
 
   // Unlike dispatch_async_f, dispatch_sync_f blocks until the work passed to it
