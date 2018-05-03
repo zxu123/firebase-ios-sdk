@@ -32,7 +32,8 @@ static const BOOL kDefaultTimestampsInSnapshotsEnabled = NO;
   if (self = [super init]) {
     _host = kDefaultHost;
     _sslEnabled = kDefaultSSLEnabled;
-    _dispatchQueue = dispatch_get_main_queue();
+    // _dispatchQueue = dispatch_get_main_queue();
+    _dispatchQueue = dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0);
     _persistenceEnabled = kDefaultPersistenceEnabled;
     _timestampsInSnapshotsEnabled = kDefaultTimestampsInSnapshotsEnabled;
   }
