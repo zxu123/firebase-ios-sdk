@@ -380,8 +380,9 @@ static const FSTListenSequenceNumber kMaxListenNumber = INT64_MAX;
       FSTAssert(queryData, @"Local view changes contain unallocated query.");
       FSTTargetID targetID = queryData.targetID;
       [view.removedKeys enumerateObjectsUsingBlock:^(FSTDocumentKey *key, BOOL *stop) {
-        [self->_persistence.referenceDelegate removeMutationReference:key
-                                                       sequenceNumber:sequenceNumber];
+        [self->_persistence.referenceDelegate removeReference:key
+                                                       target:targetID
+                                               sequenceNumber:sequenceNumber];
       }];
       [localViewReferences addReferencesToKeys:view.addedKeys forID:targetID];
       [localViewReferences removeReferencesToKeys:view.removedKeys forID:targetID];
