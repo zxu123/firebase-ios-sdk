@@ -22,8 +22,6 @@
 #include "Firestore/core/src/firebase/firestore/util/firebase_assert.h"
 #include "absl/memory/memory.h"
 
-#include <iostream>
-
 namespace firebase {
 namespace firestore {
 namespace util {

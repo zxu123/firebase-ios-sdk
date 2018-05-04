@@ -159,8 +159,8 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (void)dealloc {
+  // Clear all delayed operations so that GCD doesn't try to run them after the queue is destroyed.
   [self.workerDispatchQueue clear];
-  //[self.userDispatchQueue clear];
 }
 
 - (void)initializeWithUser:(const User &)user usePersistence:(BOOL)usePersistence {

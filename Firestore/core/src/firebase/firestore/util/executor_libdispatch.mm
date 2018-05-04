@@ -28,6 +28,8 @@ absl::string_view StringViewFromDispatchLabel(const char* const label) {
   return label ? absl::string_view{label} : absl::string_view{""};
 }
 
+}
+
 void DispatchAsync(const dispatch_queue_t queue, std::function<void()>&& work) {
   // Wrap the passed invocable object into a std::function. It's dynamically
   // allocated to make sure the object is valid by the time libdispatch gets to
@@ -57,6 +59,7 @@ void DispatchSync(const dispatch_queue_t queue, std::function<void()> work) {
   });
 }
 
+namespace {
 
 template <typename Work>
 void RunSynchronized(const ExecutorLibdispatch* const executor, Work&& work) {

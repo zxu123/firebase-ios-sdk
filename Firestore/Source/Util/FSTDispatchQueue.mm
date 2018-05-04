@@ -23,12 +23,8 @@
 #import "Firestore/Source/Util/FSTDispatchQueue.h"
 
 #include "Firestore/core/src/firebase/firestore/util/async_queue.h"
-#include "Firestore/core/src/firebase/firestore/util/executor.h"
-#include "absl/memory/memory.h"
-
 #include "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
-
-#include <type_traits>
+#include "absl/memory/memory.h"
 
 using firebase::firestore::util::AsyncQueue;
 using firebase::firestore::util::DelayedOperation;
@@ -67,10 +63,6 @@ NS_ASSUME_NONNULL_BEGIN
   std::unique_ptr<AsyncQueue> _impl;
 }
 
-// -(dispatch_queue_t) queue {
-//   return _queue;
-// }
-
 + (instancetype)queueWith:(dispatch_queue_t)dispatchQueue {
   return [[FSTDispatchQueue alloc] initWithQueue:dispatchQueue];
 }
@@ -81,11 +73,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)initWithQueue:(dispatch_queue_t)queue {
   if (self = [super init]) {
-    // std::unique_ptr<Executor> executor{new ExecutorLibdispatch(queue)};
     _queue = queue;
-      // (__bridge __nonnull dispatch_queue_t) 
-    auto tmp = new ExecutorLibdispatch(queue);
-    std::unique_ptr<Executor> executor{tmp};
+    auto executor = absl::make_unique<ExecutorLibdispatch>(queue);
     _impl = absl::make_unique<AsyncQueue>(std::move(executor));
   }
   return self;
@@ -119,12 +108,10 @@ NS_ASSUME_NONNULL_BEGIN
   DelayedOperation delayed_operation =
       _impl->EnqueueAfterDelay(delay_ms, timer_id, [block] { block(); });
   return [[FSTDelayedCallback alloc] initWithImpl:std::move(delayed_operation)];
-  // return nil;
 }
 
 - (BOOL)containsDelayedCallbackWithTimerID:(FSTTimerID)timerID {
   return _impl->IsScheduled(static_cast<TimerId>(timerID));
-  // return NO;
 }
 
 - (void)runDelayedCallbacksUntil:(FSTTimerID)lastTimerID {

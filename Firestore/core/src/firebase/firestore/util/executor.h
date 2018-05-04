@@ -116,6 +116,14 @@ class Executor {
   // empty `optional` is returned.
   virtual absl::optional<TaggedOperation> PopFromSchedule() = 0;
 
+  // By the end of the call, the executor will be empty:
+  // - operations scheduled for delayed execution will be canceled and removed
+  //   from schedule;
+  // - operation currently in progress will be executed to completion. The
+  //   function will not return until this operation finishes;
+  // - operations scheduled for immediate execution but not currently in
+  //   progress might be executed immediately or discarded. In the former case,
+  //   the function will not return until the last immediate operation finishes.
   virtual void Clear() = 0;
 };
 
