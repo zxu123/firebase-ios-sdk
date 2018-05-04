@@ -30,6 +30,10 @@
 #include "Firestore/core/src/firebase/firestore/util/firebase_assert.h"
 #include "absl/strings/string_view.h"
 
+// Careful: `dispatch_queue_t` gets defined to different types when compiled in
+// C++ or Objective C mode. Source files including this header should all be
+// compiled in the same mode to avoid linker errors.
+
 namespace firebase {
 namespace firestore {
 namespace util {
@@ -39,46 +43,10 @@ namespace internal {
 // Generic wrapper over `dispatch_async_f`, providing `dispatch_async`-like
 // interface: accepts an arbitrary invocable object in place of an Objective-C
 // block.
-template <typename Work>
-void DispatchAsync(const dispatch_queue_t queue, Work&& work) {
-  using Func = std::function<void()>;
-
-  // Wrap the passed invocable object into a std::function. It's dynamically
-  // allocated to make sure the object is valid by the time libdispatch gets to
-  // it.
-  const auto wrap = new Func{std::move(work)};
-
-  dispatch_async_f(queue, wrap, [](void* const raw_work) {
-    const auto unwrap = static_cast<Func*>(raw_work);
-    (*unwrap)();
-    delete unwrap;
-  });
-}
-
-inline absl::string_view StringViewFromDispatchLabel(const char* const label) {
-  // Make sure string_view's data is not null, because it's used for logging.
-  return label ? absl::string_view{label} : absl::string_view{""};
-}
+void DispatchAsync(dispatch_queue_t queue, std::function<void()>&& work);
 
 // Similar to `DispatchAsync` but wraps `dispatch_sync_f`.
-template <typename Work>
-void DispatchSync(const dispatch_queue_t queue, Work&& work) {
-  FIREBASE_ASSERT_MESSAGE(
-          StringViewFromDispatchLabel(dispatch_queue_get_label(queue)) !=
-          StringViewFromDispatchLabel(
-              dispatch_queue_get_label(dispatch_get_main_queue())),
-      "Calling dispatch_sync on the main queue will lead to a deadlock.");
-
-  using Func = std::function<void()>;
-
-  // Unlike dispatch_async_f, dispatch_sync_f blocks until the work passed to it
-  // is done, so passing a pointer to a local variable is okay.
-  Func wrap{std::move(work)};
-  dispatch_sync_f(queue, &wrap, [](void* const raw_work) {
-    const auto unwrap = static_cast<Func*>(raw_work);
-    (*unwrap)();
-  });
-}
+void DispatchSync(dispatch_queue_t queue, std::function<void()> work);
 
 class TimeSlot;
 

@@ -23,6 +23,41 @@ namespace internal {
 
 namespace {
 
+absl::string_view StringViewFromDispatchLabel(const char* const label) {
+  // Make sure string_view's data is not null, because it's used for logging.
+  return label ? absl::string_view{label} : absl::string_view{""};
+}
+
+void DispatchAsync(const dispatch_queue_t queue, std::function<void()>&& work) {
+  // Wrap the passed invocable object into a std::function. It's dynamically
+  // allocated to make sure the object is valid by the time libdispatch gets to
+  // it.
+  const auto wrap = new std::function<void()>{std::move(work)};
+
+  dispatch_async_f(queue, wrap, [](void* const raw_work) {
+    const auto unwrap = static_cast<std::function<void()>*>(raw_work);
+    (*unwrap)();
+    delete unwrap;
+  });
+}
+
+void DispatchSync(const dispatch_queue_t queue, std::function<void()> work) {
+  FIREBASE_ASSERT_MESSAGE(
+          StringViewFromDispatchLabel(dispatch_queue_get_label(queue)) !=
+          StringViewFromDispatchLabel(
+              dispatch_queue_get_label(dispatch_get_main_queue())),
+      "Calling dispatch_sync on the main queue will lead to a deadlock.");
+
+  // Unlike dispatch_async_f, dispatch_sync_f blocks until the work passed to it
+  // is done, so passing a pointer to a local variable is okay.
+  std::function<void()> wrap{std::move(work)};
+  dispatch_sync_f(queue, &wrap, [](void* const raw_work) {
+    const auto unwrap = static_cast<std::function<void()>*>(raw_work);
+    (*unwrap)();
+  });
+}
+
+
 template <typename Work>
 void RunSynchronized(const ExecutorLibdispatch* const executor, Work&& work) {
   if (executor->IsCurrentExecutor()) {
