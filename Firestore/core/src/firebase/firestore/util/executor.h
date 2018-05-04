@@ -81,7 +81,8 @@ class Executor {
     Operation operation;
   };
 
-  virtual ~Executor() {}
+  virtual ~Executor() {
+  }
 
   // Schedules the `operation` to be asynchronously executed as soon as
   // possible, in FIFO order.

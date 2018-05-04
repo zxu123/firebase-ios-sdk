@@ -27,7 +27,6 @@ absl::string_view StringViewFromDispatchLabel(const char* const label) {
   // Make sure string_view's data is not null, because it's used for logging.
   return label ? absl::string_view{label} : absl::string_view{""};
 }
-
 }
 
 void DispatchAsync(const dispatch_queue_t queue, std::function<void()>&& work) {
@@ -45,7 +44,7 @@ void DispatchAsync(const dispatch_queue_t queue, std::function<void()>&& work) {
 
 void DispatchSync(const dispatch_queue_t queue, std::function<void()> work) {
   FIREBASE_ASSERT_MESSAGE(
-          StringViewFromDispatchLabel(dispatch_queue_get_label(queue)) !=
+      StringViewFromDispatchLabel(dispatch_queue_get_label(queue)) !=
           StringViewFromDispatchLabel(
               dispatch_queue_get_label(dispatch_get_main_queue())),
       "Calling dispatch_sync on the main queue will lead to a deadlock.");

@@ -158,5 +158,3 @@ class AsyncQueue {
 }  // namespace firebase
 
 #endif  // FIRESTORE_CORE_SRC_FIREBASE_FIRESTORE_UTIL_ASYNC_QUEUE_H_
-
-
