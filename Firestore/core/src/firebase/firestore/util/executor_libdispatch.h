@@ -40,42 +40,43 @@ namespace internal {
 // interface: accepts an arbitrary invocable object in place of an Objective-C
 // block.
 template <typename Work>
-void DispatchAsync(const dispatch_queue_t queue, Work&& work, const std::string& tag = "") {
+void DispatchAsync(const dispatch_queue_t queue, Work&& work) {
   using Func = std::function<void()>;
 
   // Wrap the passed invocable object into a std::function. It's dynamically
   // allocated to make sure the object is valid by the time libdispatch gets to
   // it.
-  struct Wrap {
-    std::string tag;
-    Func func;
-  };
-  Wrap* wrap = new Wrap{tag, work};
+  const auto wrap = new Func{std::move(work)};
 
   dispatch_async_f(queue, wrap, [](void* const raw_work) {
-    const auto unwrap = static_cast<Wrap*>(raw_work);
-    unwrap->func();
-    const auto copy_tag = unwrap->tag;
-    (void)copy_tag;
+    const auto unwrap = static_cast<Func*>(raw_work);
+    (*unwrap)();
     delete unwrap;
   });
 }
 
+inline absl::string_view StringViewFromDispatchLabel(const char* const label) {
+  // Make sure string_view's data is not null, because it's used for logging.
+  return label ? absl::string_view{label} : absl::string_view{""};
+}
+
 // Similar to `DispatchAsync` but wraps `dispatch_sync_f`.
 template <typename Work>
-void DispatchSync(const dispatch_queue_t queue, Work&& work, const std::string& tag = "") {
+void DispatchSync(const dispatch_queue_t queue, Work&& work) {
+  FIREBASE_ASSERT_MESSAGE(
+          StringViewFromDispatchLabel(dispatch_queue_get_label(queue)) !=
+          StringViewFromDispatchLabel(
+              dispatch_queue_get_label(dispatch_get_main_queue())),
+      "Calling dispatch_sync on the main queue will lead to a deadlock.");
+
   using Func = std::function<void()>;
 
   // Unlike dispatch_async_f, dispatch_sync_f blocks until the work passed to it
   // is done, so passing a pointer to a local variable is okay.
-  struct Wrap {
-    std::string tag;
-    Func func;
-  } wrap{tag, work};
-
+  Func wrap{std::move(work)};
   dispatch_sync_f(queue, &wrap, [](void* const raw_work) {
-    const auto unwrap = static_cast<Wrap*>(raw_work);
-    unwrap->func();
+    const auto unwrap = static_cast<Func*>(raw_work);
+    (*unwrap)();
   });
 }
 
@@ -113,36 +114,11 @@ class ExecutorLibdispatch : public Executor {
   absl::string_view GetCurrentQueueLabel() const;
   absl::string_view GetTargetQueueLabel() const;
 
-  // std::atomic<dispatch_queue_t> dispatch_queue_;
   dispatch_queue_t dispatch_queue_;
   // Stores non-owned pointers to `TimeSlot`s.
   // Invariant: if a `TimeSlot` is in `schedule_`, it's a valid pointer.
   std::vector<TimeSlot*> schedule_;
-
- public:
-  std::string name_;
 };
-
-inline std::string GenerateName(const bool update = true) {
-  static std::string last_name = std::string{"com.google.firebase.firestore"};
-  if (update) {
-    last_name = std::string{"com.google.firebase.firestore"} +
-                std::to_string(std::rand());
-  }
-  return last_name;
-}
-
-inline ExecutorLibdispatch::ExecutorLibdispatch(const dispatch_queue_t dispatch_queue)
-    : dispatch_queue_{dispatch_queue} {
-  name_ = GenerateName();
-}
-inline ExecutorLibdispatch::ExecutorLibdispatch()
-    // :
-    // ExecutorLibdispatch{dispatch_queue_create("com.google.firebase.firestore",
-    : ExecutorLibdispatch{dispatch_queue_create(GenerateName(true).c_str(),
-                                                DISPATCH_QUEUE_SERIAL)} {
-  name_ = GenerateName(false);
-}
 
 }  // namespace internal
 }  // namespace util

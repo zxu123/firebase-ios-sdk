@@ -16,8 +16,6 @@
 
 #include "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
 
-#include <iostream>
-
 namespace firebase {
 namespace firestore {
 namespace util {
@@ -25,18 +23,12 @@ namespace internal {
 
 namespace {
 
-absl::string_view StringViewFromDispatchLabel(const char* const label) {
-  // Make sure string_view's data is not null, because it's used for logging.
-  return label ? absl::string_view{label} : absl::string_view{""};
-}
-
 template <typename Work>
 void RunSynchronized(const ExecutorLibdispatch* const executor, Work&& work) {
   if (executor->IsCurrentExecutor()) {
     work();
   } else {
-    DispatchSync(executor->dispatch_queue(), std::forward<Work>(work),
-                 executor->name_);
+    DispatchSync(executor->dispatch_queue(), std::forward<Work>(work));
   }
 }
 
@@ -149,6 +141,14 @@ void TimeSlot::RemoveFromSchedule() {
 
 // ExecutorLibdispatch
 
+ExecutorLibdispatch::ExecutorLibdispatch(const dispatch_queue_t dispatch_queue)
+    : dispatch_queue_{dispatch_queue} {
+}
+ExecutorLibdispatch::ExecutorLibdispatch()
+    : ExecutorLibdispatch{dispatch_queue_create("com.google.firebase.firestore",
+                                                DISPATCH_QUEUE_SERIAL)} {
+}
+
 void ExecutorLibdispatch::Clear() {
   // Turn any operations that might still be in the queue into no-ops, lest
   // they try to access `ExecutorLibdispatch` after it gets destroyed. Because
@@ -170,15 +170,10 @@ std::string ExecutorLibdispatch::CurrentExecutorName() const {
 }
 
 void ExecutorLibdispatch::Execute(Operation&& operation) {
-  DispatchAsync(dispatch_queue(), std::move(operation), name_);
+  DispatchAsync(dispatch_queue(), std::move(operation));
 }
 void ExecutorLibdispatch::ExecuteBlocking(Operation&& operation) {
-  FIREBASE_ASSERT_MESSAGE(
-      GetTargetQueueLabel() !=
-          StringViewFromDispatchLabel(
-              dispatch_queue_get_label(dispatch_get_main_queue())),
-      "Calling DispatchSync on the main queue will lead to a deadlock.");
-  DispatchSync(dispatch_queue(), std::move(operation), name_);
+  DispatchSync(dispatch_queue(), std::move(operation));
 }
 
 DelayedOperation ExecutorLibdispatch::Schedule(const Milliseconds delay,
@@ -238,10 +233,9 @@ absl::string_view ExecutorLibdispatch::GetTargetQueueLabel() const {
 bool ExecutorLibdispatch::IsScheduled(const Tag tag) const {
   bool result = false;
   RunSynchronized(this, [this, tag, &result] {
-    result = std::find_if(schedule_.begin(), schedule_.end(),
-                          [&tag](const TimeSlot* const operation) {
-                            return *operation == tag;
-                          }) != schedule_.end();
+    result = std::any_of(
+        schedule_.begin(), schedule_.end(),
+        [&tag](const TimeSlot* const operation) { return *operation == tag; });
   });
   return result;
 }
