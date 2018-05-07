@@ -63,6 +63,21 @@ NS_ASSUME_NONNULL_BEGIN
   std::unique_ptr<AsyncQueue> _impl;
 }
 
++ (TimerId) convertTimerId:(FSTTimerID)objcTimerID {
+  const TimerId converted = static_cast<TimerId>(objcTimerID);
+  switch (converted) {
+    case TimerId::All:
+    case TimerId::ListenStreamIdle:
+    case TimerId::ListenStreamConnectionBackoff:
+    case TimerId::WriteStreamIdle:
+    case TimerId::WriteStreamConnectionBackoff:
+    case TimerId::OnlineStateTimeout:
+    return converted;
+    default:
+    FSTAssert(false, @"Unknown value of enum FSTTimerID.");
+  }
+}
+
 + (instancetype)queueWith:(dispatch_queue_t)dispatchQueue {
   return [[FSTDispatchQueue alloc] initWithQueue:dispatchQueue];
 }
@@ -103,20 +118,20 @@ NS_ASSUME_NONNULL_BEGIN
 - (FSTDelayedCallback *)dispatchAfterDelay:(NSTimeInterval)delay
                                    timerID:(FSTTimerID)timerID
                                      block:(void (^)(void))block {
-  const AsyncQueue::Milliseconds delay_ms =
+  const AsyncQueue::Milliseconds delayMs =
       std::chrono::milliseconds(static_cast<long long>(delay * 1000));
-  const TimerId timer_id = static_cast<TimerId>(timerID);
+  const TimerId convertedTimerId = [FSTDispatchQueue convertTimerId:timerID];
   DelayedOperation delayed_operation =
-      _impl->EnqueueAfterDelay(delay_ms, timer_id, [block] { block(); });
+      _impl->EnqueueAfterDelay(delayMs, convertedTimerId, [block] { block(); });
   return [[FSTDelayedCallback alloc] initWithImpl:std::move(delayed_operation)];
 }
 
 - (BOOL)containsDelayedCallbackWithTimerID:(FSTTimerID)timerID {
-  return _impl->IsScheduled(static_cast<TimerId>(timerID));
+  return _impl->IsScheduled([FSTDispatchQueue convertTimerId:timerID]);
 }
 
 - (void)runDelayedCallbacksUntil:(FSTTimerID)lastTimerID {
-  _impl->RunScheduledOperationsUntil(static_cast<TimerId>(lastTimerID));
+  _impl->RunScheduledOperationsUntil([FSTDispatchQueue convertTimerId:lastTimerID]);
 }
 
 @end
