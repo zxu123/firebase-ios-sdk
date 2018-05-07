@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Google
+ * Copyright 2018 Google
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,6 @@
  * limitations under the License.
  */
 
-/** Version for Firestore. */
-
-#import <Foundation/Foundation.h>
-
-/** Version string for the Firebase Firestore SDK. */
-FOUNDATION_EXPORT const unsigned char *const FIRFirestoreVersionString;
+#import "FIRError.h"
+#import "FIRFunctions.h"
+#import "FIRHTTPSCallable.h"

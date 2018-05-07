@@ -27,12 +27,12 @@ absl::string_view StringViewFromDispatchLabel(const char* const label) {
   // Make sure string_view's data is not null, because it's used for logging.
   return label ? absl::string_view{label} : absl::string_view{""};
 }
-}
+
+}  // namespace
 
 void DispatchAsync(const dispatch_queue_t queue, std::function<void()>&& work) {
-  // Wrap the passed invocable object into a std::function. It's dynamically
-  // allocated to make sure the object is valid by the time libdispatch gets to
-  // it.
+  // Dynamically allocate the function to make sure the object is valid by the
+  // time libdispatch gets to it.
   const auto wrap = new std::function<void()>{std::move(work)};
 
   dispatch_async_f(queue, wrap, [](void* const raw_work) {
@@ -50,9 +50,8 @@ void DispatchSync(const dispatch_queue_t queue, std::function<void()> work) {
       "Calling dispatch_sync on the main queue will lead to a deadlock.");
 
   // Unlike dispatch_async_f, dispatch_sync_f blocks until the work passed to it
-  // is done, so passing a pointer to a local variable is okay.
-  std::function<void()> wrap{std::move(work)};
-  dispatch_sync_f(queue, &wrap, [](void* const raw_work) {
+  // is done, so passing a reference to a local variable is okay.
+  dispatch_sync_f(queue, &work, [](void* const raw_work) {
     const auto unwrap = static_cast<std::function<void()>*>(raw_work);
     (*unwrap)();
   });
@@ -204,6 +203,9 @@ bool ExecutorLibdispatch::IsCurrentExecutor() const {
 }
 std::string ExecutorLibdispatch::CurrentExecutorName() const {
   return GetCurrentQueueLabel().data();
+}
+std::string ExecutorLibdispatch::Name() const {
+  return GetTargetQueueLabel().data();
 }
 
 void ExecutorLibdispatch::Execute(Operation&& operation) {

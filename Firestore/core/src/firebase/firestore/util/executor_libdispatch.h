@@ -59,6 +59,7 @@ class ExecutorLibdispatch : public Executor {
 
   bool IsCurrentExecutor() const override;
   std::string CurrentExecutorName() const override;
+  std::string Name() const override;
 
   void Execute(Operation&& operation) override;
   void ExecuteBlocking(Operation&& operation) override;

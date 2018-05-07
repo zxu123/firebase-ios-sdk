@@ -30,6 +30,7 @@
 #include "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
 
 using firebase::firestore::util::internal::ExecutorLibdispatch;
+using firebase::firestore::model::DocumentKeySet;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -57,7 +58,7 @@ NS_ASSUME_NONNULL_BEGIN
   FSTQueryListener *listener = [self listenToQuery:query accumulatingSnapshots:accum];
   FSTQueryListener *otherListener = [self listenToQuery:query accumulatingSnapshots:otherAccum];
 
-  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:[FSTDocumentKeySet keySet]];
+  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:DocumentKeySet{}];
   FSTViewSnapshot *snap1 = FSTTestApplyChanges(view, @[ doc1, doc2 ], nil);
   FSTViewSnapshot *snap2 = FSTTestApplyChanges(view, @[ doc2prime ], nil);
 
@@ -111,7 +112,7 @@ NS_ASSUME_NONNULL_BEGIN
 
   FSTQueryListener *listener = [self listenToQuery:query accumulatingSnapshots:accum];
 
-  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:[FSTDocumentKeySet keySet]];
+  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:DocumentKeySet{}];
   FSTViewSnapshot *snap1 = FSTTestApplyChanges(view, @[], nil);
 
   FSTTargetChange *ackTarget =
@@ -140,7 +141,7 @@ NS_ASSUME_NONNULL_BEGIN
               [listener mute];
             }];
 
-  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:[FSTDocumentKeySet keySet]];
+  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:DocumentKeySet{}];
   FSTViewSnapshot *viewSnapshot1 = FSTTestApplyChanges(view, @[ doc1 ], nil);
   FSTViewSnapshot *viewSnapshot2 = FSTTestApplyChanges(view, @[ doc2 ], nil);
 
@@ -182,7 +183,7 @@ NS_ASSUME_NONNULL_BEGIN
   FSTQueryListener *fullListener =
       [self listenToQuery:query options:options accumulatingSnapshots:fullAccum];
 
-  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:[FSTDocumentKeySet keySet]];
+  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:DocumentKeySet{}];
   FSTViewSnapshot *snap1 = FSTTestApplyChanges(view, @[ doc1 ], nil);
 
   FSTTargetChange *ackTarget =
@@ -222,7 +223,7 @@ NS_ASSUME_NONNULL_BEGIN
   FSTQueryListener *fullListener =
       [self listenToQuery:query options:options accumulatingSnapshots:fullAccum];
 
-  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:[FSTDocumentKeySet keySet]];
+  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:DocumentKeySet{}];
   FSTViewSnapshot *snap1 = FSTTestApplyChanges(view, @[ doc1, doc2 ], nil);
   FSTViewSnapshot *snap2 = FSTTestApplyChanges(view, @[ doc1Prime ], nil);
   FSTViewSnapshot *snap3 = FSTTestApplyChanges(view, @[ doc3 ], nil);
@@ -269,7 +270,7 @@ NS_ASSUME_NONNULL_BEGIN
   FSTQueryListener *fullListener =
       [self listenToQuery:query options:options accumulatingSnapshots:fullAccum];
 
-  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:[FSTDocumentKeySet keySet]];
+  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:DocumentKeySet{}];
   FSTViewSnapshot *snap1 = FSTTestApplyChanges(view, @[ doc1, doc2 ], nil);
   FSTViewSnapshot *snap2 = FSTTestApplyChanges(view, @[ doc1Prime ], nil);
   FSTViewSnapshot *snap3 = FSTTestApplyChanges(view, @[ doc3 ], nil);
@@ -302,7 +303,7 @@ NS_ASSUME_NONNULL_BEGIN
   FSTQueryListener *filteredListener =
       [self listenToQuery:query accumulatingSnapshots:filteredAccum];
 
-  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:[FSTDocumentKeySet keySet]];
+  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:DocumentKeySet{}];
   FSTViewSnapshot *snap1 = FSTTestApplyChanges(view, @[ doc1, doc2 ], nil);
   FSTViewSnapshot *snap2 = FSTTestApplyChanges(view, @[ doc1Prime, doc3 ], nil);
 
@@ -335,7 +336,7 @@ NS_ASSUME_NONNULL_BEGIN
                                                                         waitForSyncWhenOnline:YES]
           accumulatingSnapshots:events];
 
-  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:[FSTDocumentKeySet keySet]];
+  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:DocumentKeySet{}];
   FSTViewSnapshot *snap1 = FSTTestApplyChanges(view, @[ doc1 ], nil);
   FSTViewSnapshot *snap2 = FSTTestApplyChanges(view, @[ doc2 ], nil);
   FSTViewSnapshot *snap3 =
@@ -378,7 +379,7 @@ NS_ASSUME_NONNULL_BEGIN
                                                                         waitForSyncWhenOnline:YES]
           accumulatingSnapshots:events];
 
-  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:[FSTDocumentKeySet keySet]];
+  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:DocumentKeySet{}];
   FSTViewSnapshot *snap1 = FSTTestApplyChanges(view, @[ doc1 ], nil);
   FSTViewSnapshot *snap2 = FSTTestApplyChanges(view, @[ doc2 ], nil);
 
@@ -419,7 +420,7 @@ NS_ASSUME_NONNULL_BEGIN
                                            options:[FSTListenOptions defaultOptions]
                              accumulatingSnapshots:events];
 
-  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:[FSTDocumentKeySet keySet]];
+  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:DocumentKeySet{}];
   FSTViewSnapshot *snap1 = FSTTestApplyChanges(view, @[], nil);
 
   [listener applyChangedOnlineState:FSTOnlineStateOnline];   // no event
@@ -445,7 +446,7 @@ NS_ASSUME_NONNULL_BEGIN
                                            options:[FSTListenOptions defaultOptions]
                              accumulatingSnapshots:events];
 
-  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:[FSTDocumentKeySet keySet]];
+  FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:DocumentKeySet{}];
   FSTViewSnapshot *snap1 = FSTTestApplyChanges(view, @[], nil);
 
   [listener applyChangedOnlineState:FSTOnlineStateOffline];  // no event

@@ -81,11 +81,11 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (void)verifyIsCurrentQueue {
-  _impl->VerifyCalledFromOperation();
+  _impl->VerifyIsCurrentQueue();
 }
 
 - (void)enterCheckedOperation:(void (^)(void))block {
-  _impl->StartExecution([block] { block(); });
+  _impl->ExecuteBlocking([block] { block(); });
 }
 
 - (void)dispatchAsync:(void (^)(void))block {
@@ -93,7 +93,7 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (void)dispatchAsyncAllowingSameQueue:(void (^)(void))block {
-  _impl->EnqueueAllowingNesting([block] { block(); });
+  _impl->EnqueueRelaxed([block] { block(); });
 }
 
 - (void)dispatchSync:(void (^)(void))block {

@@ -80,7 +80,11 @@ if(HAVE_LIBDISPATCH)
     SOURCES
       executor_test.h
       executor_test.cc
+<<<<<<< HEAD
       executor_libdispatch_test.mm
+=======
+      executor_libdispatch_test.cc
+>>>>>>> master
       async_tests_util.h
     DEPENDS
       firebase_firestore_util_executor_libdispatch
@@ -107,7 +111,11 @@ if(HAVE_LIBDISPATCH)
     SOURCES
       async_queue_test.h
       async_queue_test.cc
+<<<<<<< HEAD
       async_queue_test_libdispatch.mm
+=======
+      async_queue_test_libdispatch.cc
+>>>>>>> master
       async_tests_util.h
     DEPENDS
     firebase_firestore_util_executor_libdispatch
@@ -123,6 +131,7 @@ cc_test(
     autoid_test.cc
     bits_test.cc
     comparison_test.cc
+    hashing_test.cc
     iterator_adaptors_test.cc
     ordered_code_test.cc
     status_test.cc
