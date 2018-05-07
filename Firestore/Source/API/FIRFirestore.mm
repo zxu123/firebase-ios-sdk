@@ -276,12 +276,13 @@ extern "C" NSString *const FIRFirestoreErrorDomain = @"FIRFirestoreErrorDomain";
       const DatabaseInfo database_info(*self.databaseID, util::MakeStringView(_persistenceKey),
                                        util::MakeStringView(_settings.host), _settings.sslEnabled);
 
-      std::unique_ptr<Executor> userExecutor = absl::make_unique<ExecutorLibdispatch>(_settings.dispatchQueue);
+      std::unique_ptr<Executor> userExecutor =
+          absl::make_unique<ExecutorLibdispatch>(_settings.dispatchQueue);
 
       _client = [FSTFirestoreClient clientWithDatabaseInfo:database_info
                                             usePersistence:_settings.persistenceEnabled
                                        credentialsProvider:_credentialsProvider.get()
-                                         userExecutor:std::move(userExecutor)
+                                              userExecutor:std::move(userExecutor)
                                        workerDispatchQueue:_workerDispatchQueue];
     }
   }

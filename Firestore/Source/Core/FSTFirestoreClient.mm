@@ -99,7 +99,7 @@ NS_ASSUME_NONNULL_BEGIN
   std::unique_ptr<Executor> _userExecutor;
 }
 
-- (Executor*) userExecutor {
+- (Executor *)userExecutor {
   return _userExecutor.get();
 }
 

@@ -38,7 +38,15 @@
 @class FSTQueryListener;
 @class FSTTransaction;
 
-namespace firebase { namespace firestore { namespace util { namespace internal { class Executor; } }}}
+namespace firebase {
+namespace firestore {
+namespace util {
+namespace internal {
+class Executor;
+}
+}
+}
+}
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -54,12 +62,13 @@ NS_ASSUME_NONNULL_BEGIN
  *
  * All callbacks and events will be triggered on the provided userExecutor.
  */
-+ (instancetype)clientWithDatabaseInfo:(const firebase::firestore::core::DatabaseInfo &)databaseInfo
-                        usePersistence:(BOOL)usePersistence
-                   credentialsProvider:(firebase::firestore::auth::CredentialsProvider *)
-                                           credentialsProvider  // no passing ownership
-                     userExecutor:(std::unique_ptr<firebase::firestore::util::internal::Executor>)userExecutor
-                   workerDispatchQueue:(FSTDispatchQueue *)workerDispatchQueue;
++ (instancetype)
+clientWithDatabaseInfo:(const firebase::firestore::core::DatabaseInfo &)databaseInfo
+        usePersistence:(BOOL)usePersistence
+   credentialsProvider:(firebase::firestore::auth::CredentialsProvider *)
+                           credentialsProvider  // no passing ownership
+          userExecutor:(std::unique_ptr<firebase::firestore::util::internal::Executor>)userExecutor
+   workerDispatchQueue:(FSTDispatchQueue *)workerDispatchQueue;
 
 - (instancetype)init __attribute__((unavailable("Use static constructor method.")));
 
@@ -113,7 +122,7 @@ NS_ASSUME_NONNULL_BEGIN
  * Dispatch queue for user callbacks / events. This will often be the "Main Dispatch Queue" of the
  * app but the developer can configure it to a different queue if they so choose.
  */
-- (firebase::firestore::util::internal::Executor*) userExecutor;
+- (firebase::firestore::util::internal::Executor *)userExecutor;
 
 @end
 

@@ -103,7 +103,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (FSTDelayedCallback *)dispatchAfterDelay:(NSTimeInterval)delay
                                    timerID:(FSTTimerID)timerID
                                      block:(void (^)(void))block {
-  const AsyncQueue::Milliseconds delay_ms = std::chrono::milliseconds(static_cast<long long>(delay * 1000));
+  const AsyncQueue::Milliseconds delay_ms =
+      std::chrono::milliseconds(static_cast<long long>(delay * 1000));
   const TimerId timer_id = static_cast<TimerId>(timerID);
   DelayedOperation delayed_operation =
       _impl->EnqueueAfterDelay(delay_ms, timer_id, [block] { block(); });

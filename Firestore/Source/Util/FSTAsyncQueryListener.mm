@@ -23,11 +23,11 @@ using firebase::firestore::util::internal::Executor;
 @implementation FSTAsyncQueryListener {
   volatile BOOL _muted;
   FSTViewSnapshotHandler _snapshotHandler;
-  Executor* _executor;
+  Executor *_executor;
 }
 
 - (instancetype)initWithExecutor:(Executor *)executor
-                      snapshotHandler:(FSTViewSnapshotHandler)snapshotHandler {
+                 snapshotHandler:(FSTViewSnapshotHandler)snapshotHandler {
   if (self = [super init]) {
     _executor = executor;
     _snapshotHandler = snapshotHandler;
