@@ -23,6 +23,7 @@
 #include "Firestore/core/src/firebase/firestore/auth/credentials_provider.h"
 #include "Firestore/core/src/firebase/firestore/core/database_info.h"
 #include "Firestore/core/src/firebase/firestore/model/database_id.h"
+#include "Firestore/core/src/firebase/firestore/util/executor.h"
 
 @class FIRDocumentReference;
 @class FIRDocumentSnapshot;
@@ -37,16 +38,6 @@
 @class FSTQuery;
 @class FSTQueryListener;
 @class FSTTransaction;
-
-namespace firebase {
-namespace firestore {
-namespace util {
-namespace internal {
-class Executor;
-}
-}
-}
-}
 
 NS_ASSUME_NONNULL_BEGIN
 
