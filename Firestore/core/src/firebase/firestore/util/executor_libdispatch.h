@@ -30,9 +30,12 @@
 #include "Firestore/core/src/firebase/firestore/util/firebase_assert.h"
 #include "absl/strings/string_view.h"
 
-// Careful: `dispatch_queue_t` gets defined to different types when compiled in
-// C++ or Objective C mode. Source files including this header should all be
-// compiled in the same mode to avoid linker errors.
+#if !defined(__OBJC__)
+// `dispatch_queue_t` gets defined to different types when compiled in C++ or
+// Objective-C mode. Source files including this header should all be compiled
+// in the same mode to avoid linker errors.
+#error "This header only supports Objective-C++ (see comment for more info)."
+#endif  // !defined(__OBJC__)
 
 namespace firebase {
 namespace firestore {
