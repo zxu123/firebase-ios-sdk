@@ -26,8 +26,8 @@
 
 #import "Firestore/Example/Tests/Util/FSTHelpers.h"
 
-#include "absl/memory/memory.h"
 #include "Firestore/core/src/firebase/firestore/util/executor_libdispatch.h"
+#include "absl/memory/memory.h"
 
 using firebase::firestore::util::internal::ExecutorLibdispatch;
 using firebase::firestore::model::DocumentKeySet;
@@ -42,7 +42,8 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (void)setUp {
-  _executor = absl::make_unique<ExecutorLibdispatch>(dispatch_queue_create("FSTQueryListenerTests Queue", DISPATCH_QUEUE_SERIAL));
+  _executor = absl::make_unique<ExecutorLibdispatch>(
+      dispatch_queue_create("FSTQueryListenerTests Queue", DISPATCH_QUEUE_SERIAL));
 }
 
 - (void)testRaisesCollectionEvents {
@@ -134,12 +135,12 @@ NS_ASSUME_NONNULL_BEGIN
   FSTDocument *doc1 = FSTTestDoc("rooms/Eros", 3, @{@"name" : @"Eros"}, NO);
   FSTDocument *doc2 = FSTTestDoc("rooms/Eros", 4, @{@"name" : @"Eros2"}, NO);
 
-  __block FSTAsyncQueryListener *listener = [[FSTAsyncQueryListener alloc]
-      initWithExecutor:_executor.get()
-            snapshotHandler:^(FSTViewSnapshot *snapshot, NSError *error) {
-              [accum addObject:snapshot];
-              [listener mute];
-            }];
+  __block FSTAsyncQueryListener *listener =
+      [[FSTAsyncQueryListener alloc] initWithExecutor:_executor.get()
+                                      snapshotHandler:^(FSTViewSnapshot *snapshot, NSError *error) {
+                                        [accum addObject:snapshot];
+                                        [listener mute];
+                                      }];
 
   FSTView *view = [[FSTView alloc] initWithQuery:query remoteDocuments:DocumentKeySet{}];
   FSTViewSnapshot *viewSnapshot1 = FSTTestApplyChanges(view, @[ doc1 ], nil);
@@ -151,9 +152,7 @@ NS_ASSUME_NONNULL_BEGIN
 
   // Drain queue
   XCTestExpectation *expectation = [self expectationWithDescription:@"Queue drained"];
-  _executor->Execute([expectation] {
-    [expectation fulfill];
-  });
+  _executor->Execute([expectation] { [expectation fulfill]; });
 
   [self waitForExpectationsWithTimeout:4.0
                                handler:^(NSError *_Nullable expectationError) {

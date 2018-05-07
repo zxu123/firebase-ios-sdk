@@ -66,9 +66,8 @@ static const FSTTimerID timerID3 = FSTTimerIDWriteStreamConnectionBackoff;
   XCTAssertNotNil(caught);
 
   XCTAssertEqualObjects(caught.name, NSInternalInconsistencyException);
-    XCTAssertTrue(
-                  [caught.reason hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
-                   @"Enforcing sequential order failed"]);
+  XCTAssertTrue([caught.reason hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
+                                         @"Enforcing sequential order failed"]);
 }
 
 - (void)testDispatchAsyncAllowingSameQueueActuallyAllowsSameQueue {
@@ -133,9 +132,8 @@ static const FSTTimerID timerID3 = FSTTimerIDWriteStreamConnectionBackoff;
   XCTAssertNotNil(caught);
 
   XCTAssertEqualObjects(caught.name, NSInternalInconsistencyException);
-  XCTAssertTrue(
-       [caught.reason hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
-                                @"Enforcing sequential order failed"]);
+  XCTAssertTrue([caught.reason hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
+                                         @"Enforcing sequential order failed"]);
 }
 
 - (void)testVerifyIsCurrentQueueActuallyRequiresCurrentQueue {
@@ -149,9 +147,9 @@ static const FSTTimerID timerID3 = FSTTimerIDWriteStreamConnectionBackoff;
     caught = ex;
   }
   XCTAssertNotNil(caught);
-   XCTAssertTrue([caught.reason hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
-                                          @"Expected to be called by the executor "
-                                          @"associated with this queue"]);
+  XCTAssertTrue([caught.reason hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
+                                         @"Expected to be called by the executor "
+                                         @"associated with this queue"]);
 }
 
 - (void)testVerifyIsCurrentQueueRequiresOperationIsInProgress {
@@ -164,9 +162,9 @@ static const FSTTimerID timerID3 = FSTTimerIDWriteStreamConnectionBackoff;
     }
   });
   XCTAssertNotNil(caught);
-   XCTAssertTrue(
-       [caught.reason hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
-                                @"VerifyIsCurrentQueue called when no operation is executing"]);
+  XCTAssertTrue(
+      [caught.reason hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
+                               @"VerifyIsCurrentQueue called when no operation is executing"]);
 }
 
 - (void)testVerifyIsCurrentQueueWorksWithOperationIsInProgress {
@@ -195,10 +193,10 @@ static const FSTTimerID timerID3 = FSTTimerIDWriteStreamConnectionBackoff;
   }];
   XCTAssertNil(problem);
   XCTAssertNotNil(caught);
-  XCTAssertTrue([caught.reason
-       hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
-                 @"ExecuteBlocking may not be called before the previous operation "
-                 @"finishes executing"]);
+  XCTAssertTrue(
+      [caught.reason hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
+                               @"ExecuteBlocking may not be called before the previous operation "
+                               @"finishes executing"]);
 }
 
 /**
