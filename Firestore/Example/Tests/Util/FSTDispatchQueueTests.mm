@@ -68,7 +68,7 @@ static const FSTTimerID timerID3 = FSTTimerIDWriteStreamConnectionBackoff;
   XCTAssertEqualObjects(caught.name, NSInternalInconsistencyException);
     XCTAssertTrue(
                   [caught.reason hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
-                   @"Enforcing sequential order failed: currently executing operations cannot enqueue more operations"]);
+                   @"Enforcing sequential order failed"]);
 }
 
 - (void)testDispatchAsyncAllowingSameQueueActuallyAllowsSameQueue {
@@ -135,7 +135,7 @@ static const FSTTimerID timerID3 = FSTTimerIDWriteStreamConnectionBackoff;
   XCTAssertEqualObjects(caught.name, NSInternalInconsistencyException);
   XCTAssertTrue(
        [caught.reason hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
-                                @"Enforcing sequential order failed: currently executing operations cannot enqueue more operations"]);
+                                @"Enforcing sequential order failed"]);
 }
 
 - (void)testVerifyIsCurrentQueueActuallyRequiresCurrentQueue {
@@ -150,7 +150,8 @@ static const FSTTimerID timerID3 = FSTTimerIDWriteStreamConnectionBackoff;
   }
   XCTAssertNotNil(caught);
    XCTAssertTrue([caught.reason hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
-                                          @"Expected to be called by the executor associated with this queue"]);
+                                          @"Expected to be called by the executor "
+                                          @"associated with this queue"]);
 }
 
 - (void)testVerifyIsCurrentQueueRequiresOperationIsInProgress {
@@ -196,7 +197,8 @@ static const FSTTimerID timerID3 = FSTTimerIDWriteStreamConnectionBackoff;
   XCTAssertNotNil(caught);
   XCTAssertTrue([caught.reason
        hasPrefix:@"FIRESTORE INTERNAL ASSERTION FAILED: "
-                 @"ExecuteBlocking may not be called before the previous operation finishes executing"]);
+                 @"ExecuteBlocking may not be called before the previous operation "
+                 @"finishes executing"]);
 }
 
 /**
