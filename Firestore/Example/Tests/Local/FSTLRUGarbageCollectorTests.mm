@@ -176,7 +176,7 @@ NS_ASSUME_NONNULL_BEGIN
     [persistence shutdown];
   }
 
-  // 50 queries, 9 with 1001, incrementing from there. Should get 1002.
+  // 50 queries, 9 with 1, incrementing from there. Should get 2.
   {
     id<FSTPersistence> persistence = [self newPersistence];
     id<FSTQueryCache> queryCache = [persistence queryCache];
@@ -197,82 +197,85 @@ NS_ASSUME_NONNULL_BEGIN
     XCTAssertEqual(2, highestToCollect);
     [persistence shutdown];
   }
-/*
-  // 50 queries, 11 with 1001, incrementing from there. Should get 1001.
+
+  // 50 queries, 11 with 1, incrementing from there. Should get 1.
   {
-    _previousSequenceNumber = 1000;
     id<FSTPersistence> persistence = [self newPersistence];
-    persistence.run("50 queries, 11 with 1001, incrementing from there. Should get 1001.", [&]() {
-      id<FSTQueryCache> queryCache = [persistence queryCache];
-      [queryCache start];
-      FSTLRUGarbageCollector *gc = [self gcForPersistence:persistence];
+    id<FSTQueryCache> queryCache = [persistence queryCache];
+    [queryCache start];
+    FSTLRUGarbageCollector *gc = [self gcForPersistence:persistence];
+    persistence.run("Initial batch", [&]() {
       for (int i = 0; i < 11; i++) {
-        [queryCache addQueryData:[self nextTestQuery]];
-        _previousSequenceNumber = 1000;
+        [queryCache addQueryData:[self nextTestQuery:persistence]];
       }
-      _previousSequenceNumber = 1001;
-      for (int i = 11; i < 50; i++) {
-        [queryCache addQueryData:[self nextTestQuery]];
-      }
-      FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
-      XCTAssertEqual(1001, highestToCollect);
     });
+    for (int i = 11; i < 50; i++) {
+      persistence.run("incrementing sequence number", [&]() {
+        [queryCache addQueryData:[self nextTestQuery:persistence]];
+      });
+    }
+    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
+    XCTAssertEqual(1, highestToCollect);
     [persistence shutdown];
   }
 
-  // A mutated doc at 1000, 50 queries 1001-1050. Should get 1009.
+  // A mutated doc at 1, 50 queries 2-51. Should get 10.
   {
-    _previousSequenceNumber = 1000;
     id<FSTPersistence> persistence = [self newPersistence];
-    persistence.run("A mutated doc at 1000, 50 queries 1001-1050. Should get 1009.", [&]() {
-      id<FSTQueryCache> queryCache = [persistence queryCache];
-      [queryCache start];
-      FSTLRUGarbageCollector *gc = [self gcForPersistence:persistence];
-      FSTDocumentKey *key = [self nextTestDocKey];
+    id<FSTQueryCache> queryCache = [persistence queryCache];
+    [queryCache start];
+    FSTLRUGarbageCollector *gc = [self gcForPersistence:persistence];
+    FSTDocumentKey *key = [self nextTestDocKey];
+    persistence.run("remove mutation", [&]() {
       [persistence.referenceDelegate removeMutationReference:key];
-      for (int i = 0; i < 50; i++) {
-        [queryCache addQueryData:[self nextTestQuery]];
-      }
-      FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
-      XCTAssertEqual(1009, highestToCollect);
     });
+    for (int i = 0; i < 50; i++) {
+      persistence.run("incrementing sequence number", [&]() {
+        [queryCache addQueryData:[self nextTestQuery:persistence]];
+      });
+    }
+    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
+    XCTAssertEqual(10, highestToCollect);
     [persistence shutdown];
   }
 
   // Add mutated docs, then add one of them to a query target so it doesn't get GC'd.
-  // Expect 1002.
+  // Expect 3 (8 docs @ 1, two sequential queries, 2, and 3).
   {
-    _previousSequenceNumber = 1000;
     id<FSTPersistence> persistence = [self newPersistence];
-    persistence.run(
-        "Add mutated docs, then add one of them to a query target so it doesn't get GC'd. Expect "
-        "1002",
-        [&]() {
-          id<FSTQueryCache> queryCache = [persistence queryCache];
-          [queryCache start];
-          FSTLRUGarbageCollector *gc = [self gcForPersistence:persistence];
-          FSTDocument *docInQuery = [self nextTestDocument];
-          DocumentKeySet docInQuerySet{docInQuery.key};
-          [persistence.referenceDelegate removeMutationReference:docInQuery.key];
-          for (int i = 0; i < 8; i++) {
-            [persistence.referenceDelegate removeMutationReference:[self nextTestDocKey]];
-          }
-          // Adding 9 doc keys at 1000. If we remove one of them, we'll have room for two actual
-          // queries.
-          for (int i = 0; i < 49; i++) {
-            [queryCache addQueryData:[self nextTestQuery]];
-          }
-          FSTQueryData *queryData = [self nextTestQuery];
-          [queryCache addQueryData:queryData];
-          // This should bump one document out of the mutated documents cache.
-          [queryCache addMatchingKeys:docInQuerySet
-                          forTargetID:queryData.targetID];
-          // This should catch the remaining 8 documents, plus the first two queries we added.
-          FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
-          XCTAssertEqual(1002, highestToCollect);
-        });
+    id<FSTQueryCache> queryCache = [persistence queryCache];
+    [queryCache start];
+    FSTLRUGarbageCollector *gc = [self gcForPersistence:persistence];
+    FSTDocument *docInQuery = [self nextTestDocument];
+    DocumentKeySet docInQuerySet{docInQuery.key};
+    // Adding 9 doc keys at 1. If we remove one of them, we'll have room for two actual
+    // queries.
+    persistence.run("mutations at same sequence number: 1", [&]() {
+      [persistence.referenceDelegate removeMutationReference:docInQuery.key];
+      for (int i = 0; i < 8; i++) {
+        [persistence.referenceDelegate removeMutationReference:[self nextTestDocKey]];
+      }
+    });
+
+    for (int i = 0; i < 49; i++) {
+      persistence.run("incrementing sequence number", [&]() {
+        [queryCache addQueryData:[self nextTestQuery:persistence]];
+      });
+    }
+
+    persistence.run("Add query", [&]() {
+      FSTQueryData *queryData = [self nextTestQuery:persistence];
+      [queryCache addQueryData:queryData];
+      // This should bump one document out of the mutated documents cache.
+      [queryCache addMatchingKeys:docInQuerySet
+                      forTargetID:queryData.targetID];
+    });
+
+    // This should catch the remaining 8 documents, plus the first two queries we added.
+    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
+    XCTAssertEqual(3, highestToCollect);
     [persistence shutdown];
-  }*/
+  }
 }
 /*
 - (void)testRemoveQueriesUpThroughSequenceNumber {
