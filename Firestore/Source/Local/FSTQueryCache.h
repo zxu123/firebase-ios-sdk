@@ -18,8 +18,8 @@
 
 #import "Firestore/Source/Core/FSTTypes.h"
 #import "Firestore/Source/Local/FSTGarbageCollector.h"
-#import "Firestore/Source/Model/FSTDocumentKeySet.h"
 
+#include "Firestore/core/src/firebase/firestore/model/document_key_set.h"
 #include "Firestore/core/src/firebase/firestore/model/snapshot_version.h"
 
 @class FSTDocumentSet;
@@ -111,20 +111,17 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable FSTQueryData *)queryDataForQuery:(FSTQuery *)query;
 
 /** Adds the given document keys to cached query results of the given target ID. */
-- (void)addMatchingKeys:(FSTDocumentKeySet *)keys
-            forTargetID:(FSTTargetID)targetID
-       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
+- (void)addMatchingKeys:(const firebase::firestore::model::DocumentKeySet &)keys
+            forTargetID:(FSTTargetID)targetID;
 
 /** Removes the given document keys from the cached query results of the given target ID. */
-// TODO(gsoltis): is the sequence number necessary?
-- (void)removeMatchingKeys:(FSTDocumentKeySet *)keys
-               forTargetID:(FSTTargetID)targetID
-          atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber;
+- (void)removeMatchingKeys:(const firebase::firestore::model::DocumentKeySet &)keys
+               forTargetID:(FSTTargetID)targetID;
 
 /** Removes all the keys in the query results of the given target ID. */
 - (void)removeMatchingKeysForTargetID:(FSTTargetID)targetID;
 
-- (FSTDocumentKeySet *)matchingKeysForTargetID:(FSTTargetID)targetID;
+- (firebase::firestore::model::DocumentKeySet)matchingKeysForTargetID:(FSTTargetID)targetID;
 
 - (BOOL)containsKey:(const firebase::firestore::model::DocumentKey&)key;
 

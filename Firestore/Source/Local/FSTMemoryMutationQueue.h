@@ -16,6 +16,7 @@
 
 #import <Foundation/Foundation.h>
 
+#import "Firestore/Source/Local/FSTMemoryPersistence.h"
 #import "Firestore/Source/Local/FSTMutationQueue.h"
 
 @protocol FSTGarbageCollector;
@@ -25,7 +26,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface FSTMemoryMutationQueue : NSObject <FSTMutationQueue>
 
-+ (instancetype)mutationQueueWithPersistence:(FSTMemoryPersistence *)persistence;
+- (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)init NS_UNAVAILABLE;
 
 - (long)byteSize;
 

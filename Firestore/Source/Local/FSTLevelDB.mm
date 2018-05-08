@@ -95,14 +95,12 @@ using leveldb::WriteOptions;
 }
 
 - (void)addReference:(FSTDocumentKey *)key
-              target:(__unused FSTTargetID)targetID
-      sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+              target:(__unused FSTTargetID)targetID {
   [self writeSentinelForKey:key sequenceNumber:sequenceNumber];
 }
 
 - (void)removeReference:(FSTDocumentKey *)key
-                 target:(__unused FSTTargetID)targetID
-         sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+                 target:(__unused FSTTargetID)targetID {
   [self writeSentinelForKey:key sequenceNumber:sequenceNumber];
 }
 
@@ -183,7 +181,7 @@ using leveldb::WriteOptions;
   [self writeSentinelForKey:key sequenceNumber:sequenceNumber];
 }
 
-- (void)documentUpdated:(FSTDocumentKey *)key sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+- (void)limboDocumentUpdated:(FSTDocumentKey *)key {
   [self writeSentinelForKey:key sequenceNumber:sequenceNumber];
 }
 

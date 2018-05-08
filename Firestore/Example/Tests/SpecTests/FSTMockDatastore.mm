@@ -120,10 +120,9 @@ NS_ASSUME_NONNULL_BEGIN
   FSTLog(@"watchQuery: %d: %@", query.targetID, query.query);
   self.datastore.watchStreamRequestCount += 1;
   // Snapshot version is ignored on the wire
-  FSTQueryData *sentQueryData =
-      [query queryDataByReplacingSnapshotVersion:SnapshotVersion::None()
-                                     resumeToken:query.resumeToken
-                                  sequenceNumber:query.sequenceNumber];
+  FSTQueryData *sentQueryData = [query queryDataByReplacingSnapshotVersion:SnapshotVersion::None()
+                                                               resumeToken:query.resumeToken
+                                                            sequenceNumber:query.sequenceNumber];
   self.activeTargets[@(query.targetID)] = sentQueryData;
 }
 

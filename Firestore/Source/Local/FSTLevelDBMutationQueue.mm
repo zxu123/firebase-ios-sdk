@@ -485,8 +485,7 @@ using leveldb::WriteOptions;
   return result;
 }
 
-- (void)removeMutationBatches:(NSArray<FSTMutationBatch *> *)batches
-               sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+- (void)removeMutationBatches:(NSArray<FSTMutationBatch *> *)batches {
   NSString *userID = self.userID;
 
   auto checkIterator = _db.currentTransaction->NewIterator();
@@ -511,7 +510,7 @@ using leveldb::WriteOptions;
                                              documentKey:mutation.key
                                                  batchID:batchID];
       _db.currentTransaction->Delete(key);
-      [_db.referenceDelegate removeMutationReference:mutation.key sequenceNumber:sequenceNumber];
+      [_db.referenceDelegate removeMutationReference:mutation.key];
     }
   }
 }

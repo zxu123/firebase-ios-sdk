@@ -75,10 +75,10 @@ NS_ASSUME_NONNULL_BEGIN
     FSTMutationBatch *batch2 = [self addMutationBatch];
     XCTAssertEqual(2, [self batchCount]);
 
-    [self.mutationQueue removeMutationBatches:@[ batch2 ] sequenceNumber:[_listenSequence next]];
+    [self.mutationQueue removeMutationBatches:@[ batch2 ]];
     XCTAssertEqual(1, [self batchCount]);
 
-    [self.mutationQueue removeMutationBatches:@[ batch1 ] sequenceNumber:[_listenSequence next]];
+    [self.mutationQueue removeMutationBatches:@[ batch1 ]];
     XCTAssertEqual(0, [self batchCount]);
     XCTAssertTrue([self.mutationQueue isEmpty]);
   });
@@ -531,7 +531,7 @@ NS_ASSUME_NONNULL_BEGIN
   for (NSUInteger i = 0; i < holes.count; i++) {
     NSUInteger index = holes[i].unsignedIntegerValue - i;
     FSTMutationBatch *batch = batches[index];
-    [self.mutationQueue removeMutationBatches:@[ batch ] sequenceNumber:[_listenSequence next]];
+    [self.mutationQueue removeMutationBatches:@[ batch ]];
 
     [batches removeObjectAtIndex:index];
     [removed addObject:batch];

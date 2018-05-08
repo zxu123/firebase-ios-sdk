@@ -22,6 +22,7 @@
 #import "Firestore/Source/Model/FSTMutation.h"
 #import "Firestore/Source/Model/FSTMutationBatch.h"
 #import "Firestore/Source/Util/FSTAssert.h"
+#import "Firestore/third_party/Immutable/FSTImmutableSortedSet.h"
 
 #include "Firestore/core/src/firebase/firestore/model/document_key.h"
 #include "Firestore/core/src/firebase/firestore/model/resource_path.h"
@@ -78,10 +79,6 @@ static const int32_t kTransformSizeEstimate = sizeof(int64_t) + sizeof(int32_t);
 
 @implementation FSTMemoryMutationQueue {
   FSTMemoryPersistence *_persistence;
-}
-
-+ (instancetype)mutationQueueWithPersistence:(FSTMemoryPersistence *)persistence {
-  return [[FSTMemoryMutationQueue alloc] initWithPersistence:persistence];
 }
 
 - (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence {
@@ -296,8 +293,7 @@ static const int32_t kTransformSizeEstimate = sizeof(int64_t) + sizeof(int32_t);
   return result;
 }
 
-- (void)removeMutationBatches:(NSArray<FSTMutationBatch *> *)batches
-               sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+- (void)removeMutationBatches:(NSArray<FSTMutationBatch *> *)batches {
   NSUInteger batchCount = batches.count;
   FSTAssert(batchCount > 0, @"Should not remove mutations when none exist.");
 
@@ -355,9 +351,7 @@ static const int32_t kTransformSizeEstimate = sizeof(int64_t) + sizeof(int32_t);
     for (FSTMutation *mutation in batch.mutations) {
       const DocumentKey &key = mutation.key;
       //[garbageCollector addPotentialGarbageKey:key];
-      [_persistence.referenceDelegate removeMutationReference:key
-                                               sequenceNumber:sequenceNumber];
-
+      [_persistence.referenceDelegate removeMutationReference:key];
 
       FSTDocumentReference *reference = [[FSTDocumentReference alloc] initWithKey:key ID:batchID];
       references = [references setByRemovingObject:reference];

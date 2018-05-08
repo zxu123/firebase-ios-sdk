@@ -47,16 +47,9 @@
 namespace testutil = firebase::firestore::testutil;
 using firebase::firestore::auth::User;
 using firebase::firestore::model::SnapshotVersion;
+using firebase::firestore::model::DocumentKeySet;
 
 NS_ASSUME_NONNULL_BEGIN
-
-/** Creates a document version dictionary mapping the document in @a mutation to @a version. */
-FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
-                                                   FSTTestSnapshotVersion version) {
-  FSTDocumentVersionDictionary *result = [FSTDocumentVersionDictionary documentVersionDictionary];
-  result = [result dictionaryBySettingObject:testutil::Version(version) forKey:mutation.key];
-  return result;
-}
 
 @interface FSTLocalStoreTests ()
 
@@ -224,8 +217,8 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   FSTMutationBatch *batch = [[FSTMutationBatch alloc] initWithBatchID:1
                                                        localWriteTime:[FIRTimestamp timestamp]
                                                             mutations:@[ set1, set2 ]];
-  FSTDocumentKeySet *keys = [batch keys];
-  XCTAssertEqual(keys.count, 2);
+  DocumentKeySet keys = [batch keys];
+  XCTAssertEqual(keys.size(), 2u);
 }
 
 - (void)testHandlesSetMutation {
@@ -844,6 +837,7 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   FSTQuery *query = FSTTestQuery("foo/bar");
   FSTQueryData *queryData = [self.localStore allocateQuery:query];
+  FSTListenSequenceNumber initialSequenceNumber = queryData.sequenceNumber;
   FSTBoxedTargetID *targetID = @(queryData.targetID);
   NSData *resumeToken = FSTTestResumeTokenFromSnapshotVersion(1000);
 
@@ -870,6 +864,10 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
   // Should come back with the same resume token
   FSTQueryData *queryData2 = [self.localStore allocateQuery:query];
   XCTAssertEqualObjects(queryData2.resumeToken, resumeToken);
+
+  // The sequence number should have been bumped when we saved the new resume token.
+  FSTListenSequenceNumber newSequenceNumber = queryData2.sequenceNumber;
+  XCTAssertGreaterThan(newSequenceNumber, initialSequenceNumber);
 }
 
 - (void)testRemoteDocumentKeysForTarget {
@@ -886,11 +884,12 @@ FSTDocumentVersionDictionary *FSTVersionDictionary(FSTMutation *mutation,
 
   [self.localStore locallyWriteMutations:@[ FSTTestSetMutation(@"foo/bonk", @{@"a" : @"b"}) ]];
 
-  FSTDocumentKeySet *keys = [self.localStore remoteDocumentKeysForTarget:2];
-  FSTAssertEqualSets(keys, (@[ FSTTestDocKey(@"foo/bar"), FSTTestDocKey(@"foo/baz") ]));
+  DocumentKeySet keys = [self.localStore remoteDocumentKeysForTarget:2];
+  DocumentKeySet expected{testutil::Key("foo/bar"), testutil::Key("foo/baz")};
+  XCTAssertEqual(keys, expected);
 
   keys = [self.localStore remoteDocumentKeysForTarget:2];
-  FSTAssertEqualSets(keys, (@[ FSTTestDocKey(@"foo/bar"), FSTTestDocKey(@"foo/baz") ]));
+  XCTAssertEqual(keys, (DocumentKeySet{testutil::Key("foo/bar"), testutil::Key("foo/baz")}));
 }
 
 @end

@@ -19,7 +19,6 @@
 #include <utility>
 
 #import "Firestore/Source/Core/FSTQuery.h"
-#import "Firestore/Source/Local/FSTDocumentReference.h"
 #import "Firestore/Source/Local/FSTMemoryPersistence.h"
 #import "Firestore/Source/Local/FSTQueryData.h"
 #import "Firestore/Source/Local/FSTReferenceSet.h"
@@ -30,6 +29,8 @@
 
 using firebase::firestore::model::DocumentKey;
 using firebase::firestore::model::SnapshotVersion;
+using firebase::firestore::model::DocumentKeySet;
+using firebase::firestore::model::DocumentKey;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -146,27 +147,18 @@ NS_ASSUME_NONNULL_BEGIN
 
 #pragma mark Reference tracking
 
-- (void)addMatchingKeys:(FSTDocumentKeySet *)keys
-            forTargetID:(FSTTargetID)targetID
-       atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
-  // We're adding docs to a target, we no longer care that they were mutated.
-  for (FSTDocumentKey *key in [keys objectEnumerator]) {
-    [_persistence.referenceDelegate addReference:key
-                                          target:targetID
-                                  sequenceNumber:sequenceNumber];
-  }
+- (void)addMatchingKeys:(const DocumentKeySet &)keys forTargetID:(FSTTargetID)targetID {
   [self.references addReferencesToKeys:keys forID:targetID];
+  for (const DocumentKey &key : keys) {
+    [_persistence.referenceDelegate addReference:key target:targetID];
+  }
 }
 
-- (void)removeMatchingKeys:(FSTDocumentKeySet *)keys
-               forTargetID:(FSTTargetID)targetID
-          atSequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+- (void)removeMatchingKeys:(const DocumentKeySet &)keys forTargetID:(FSTTargetID)targetID {
   [self.references removeReferencesToKeys:keys forID:targetID];
-  [keys enumerateObjectsUsingBlock:^(FSTDocumentKey *key, BOOL *stop) {
-    [self->_persistence.referenceDelegate removeReference:key
-                                             target:targetID
-                                     sequenceNumber:sequenceNumber];
-  }];
+  for (const DocumentKey &key : keys) {
+    [_persistence.referenceDelegate removeReference:key target:targetID];
+  }
 }
 
 - (void)removeMatchingKeysForTargetID:(FSTTargetID)targetID {
@@ -174,9 +166,7 @@ NS_ASSUME_NONNULL_BEGIN
   [self.references removeReferencesForID:targetID];
 }
 
-
-
-- (FSTDocumentKeySet *)matchingKeysForTargetID:(FSTTargetID)targetID {
+- (DocumentKeySet)matchingKeysForTargetID:(FSTTargetID)targetID {
   return [self.references referencedKeysForID:targetID];
 }
 

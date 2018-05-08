@@ -28,7 +28,9 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @interface FSTMemoryQueryCache : NSObject <FSTQueryCache>
 
-- (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence;
+- (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)init NS_UNAVAILABLE;
 
 - (long)byteSize;
 

@@ -30,12 +30,14 @@
 #import "FSTFieldValue.h"
 #include "Firestore/core/src/firebase/firestore/auth/user.h"
 #include "Firestore/core/src/firebase/firestore/model/database_id.h"
+#include "Firestore/core/src/firebase/firestore/model/document_key.h"
 #include "Firestore/core/src/firebase/firestore/model/resource_path.h"
 #import "FSTEagerGarbageCollector.h"
 
 using firebase::firestore::auth::HashUser;
 using firebase::firestore::auth::User;
 using firebase::firestore::model::DatabaseId;
+using firebase::firestore::model::DocumentKey;
 using firebase::firestore::model::ResourcePath;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -187,7 +189,7 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
 - (id<FSTMutationQueue>)mutationQueueForUser:(const User &)user {
   id<FSTMutationQueue> queue = _mutationQueues[user];
   if (!queue) {
-    queue = [FSTMemoryMutationQueue mutationQueueWithPersistence:self];
+    queue = [[FSTMemoryMutationQueue alloc] initWithPersistence:self];
     _mutationQueues[user] = queue;
   }
   return queue;
@@ -354,22 +356,21 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
 
 - (void)removeTarget:(FSTQueryData *)queryData
       sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
-  [[_persistence.queryCache matchingKeysForTargetID:queryData.targetID] enumerateObjectsUsingBlock:^(FSTDocumentKey *docKey, BOOL *stop) {
-    self->_orphaned->insert(docKey);
-  }];
+  for (const DocumentKey &docKey : [_persistence.queryCache matchingKeysForTargetID:queryData.targetID]) {
+    FSTDocumentKey *key = docKey;
+    self->_orphaned->insert(key);
+  }
   [_persistence.queryCache removeQueryData:queryData];
 }
 
 
 - (void)addReference:(FSTDocumentKey *)key
-              target:(__unused FSTTargetID)targetID
-      sequenceNumber:(__unused FSTListenSequenceNumber)sequenceNumber {
+              target:(__unused FSTTargetID)targetID {
   _orphaned->erase(key);
 }
 
 - (void)removeReference:(FSTDocumentKey *)key
-                 target:(__unused FSTTargetID)targetID
-         sequenceNumber:(__unused FSTListenSequenceNumber)sequenceNumber {
+                 target:(__unused FSTTargetID)targetID {
   _orphaned->insert(key);
 }
 
