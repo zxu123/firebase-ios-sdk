@@ -171,7 +171,9 @@ NS_ASSUME_NONNULL_BEGIN
         [queryCache addQueryData:[self nextTestQuery:persistence]];
       });
     }
-    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
+    FSTListenSequenceNumber highestToCollect = persistence.run("find sequence number", [&]() -> FSTListenSequenceNumber {
+      return [gc sequenceNumberForQueryCount:10];
+    });
     XCTAssertEqual(10, highestToCollect);
     [persistence shutdown];
   }
@@ -193,7 +195,9 @@ NS_ASSUME_NONNULL_BEGIN
         [queryCache addQueryData:[self nextTestQuery:persistence]];
       });
     }
-    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
+    FSTListenSequenceNumber highestToCollect = persistence.run("find sequence number", [&]() -> FSTListenSequenceNumber {
+      return [gc sequenceNumberForQueryCount:10];
+    });
     XCTAssertEqual(2, highestToCollect);
     [persistence shutdown];
   }
@@ -214,7 +218,9 @@ NS_ASSUME_NONNULL_BEGIN
         [queryCache addQueryData:[self nextTestQuery:persistence]];
       });
     }
-    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
+    FSTListenSequenceNumber highestToCollect = persistence.run("find sequence number", [&]() -> FSTListenSequenceNumber {
+      return [gc sequenceNumberForQueryCount:10];
+    });
     XCTAssertEqual(1, highestToCollect);
     [persistence shutdown];
   }
@@ -234,7 +240,9 @@ NS_ASSUME_NONNULL_BEGIN
         [queryCache addQueryData:[self nextTestQuery:persistence]];
       });
     }
-    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
+    FSTListenSequenceNumber highestToCollect = persistence.run("find sequence number", [&]() -> FSTListenSequenceNumber {
+      return [gc sequenceNumberForQueryCount:10];
+    });
     XCTAssertEqual(10, highestToCollect);
     [persistence shutdown];
   }
@@ -272,39 +280,43 @@ NS_ASSUME_NONNULL_BEGIN
     });
 
     // This should catch the remaining 8 documents, plus the first two queries we added.
-    FSTListenSequenceNumber highestToCollect = [gc sequenceNumberForQueryCount:10];
+    FSTListenSequenceNumber highestToCollect = persistence.run("find sequence number", [&]() -> FSTListenSequenceNumber {
+      return [gc sequenceNumberForQueryCount:10];
+    });
     XCTAssertEqual(3, highestToCollect);
     [persistence shutdown];
   }
 }
-/*
+
 - (void)testRemoveQueriesUpThroughSequenceNumber {
   if ([self isTestBaseClass]) return;
 
   id<FSTPersistence> persistence = [self newPersistence];
-  persistence.run("testRemoveQueriesUpThroughSequenceNumber", [&]() {
-    id<FSTQueryCache> queryCache = [persistence queryCache];
-    [queryCache start];
-    FSTLRUGarbageCollector *gc = [self gcForPersistence:persistence];
-    NSMutableDictionary<NSNumber *, FSTQueryData *> *liveQueries =
-        [[NSMutableDictionary alloc] init];
-    for (int i = 0; i < 100; i++) {
-      FSTQueryData *queryData = [self nextTestQuery];
+  id<FSTQueryCache> queryCache = [persistence queryCache];
+  [queryCache start];
+  FSTLRUGarbageCollector *gc = [self gcForPersistence:persistence];
+  NSMutableDictionary<NSNumber *, FSTQueryData *> *liveQueries =
+      [[NSMutableDictionary alloc] init];
+  for (int i = 0; i < 100; i++) {
+    persistence.run("incrementing sequence numbers", [&]() {
+      FSTQueryData *queryData = [self nextTestQuery:persistence];
       // Mark odd queries as live so we can test filtering out live queries.
       if (queryData.targetID % 2 == 1) {
         liveQueries[@(queryData.targetID)] = queryData;
       }
       [queryCache addQueryData:queryData];
-    }
+    });
+  }
 
-    // GC up through 1015, which is 15%.
-    // Expect to have GC'd 7 targets (even values of 1001-1015).
-    NSUInteger removed = [gc removeQueriesUpThroughSequenceNumber:1015 liveQueries:liveQueries];
-    XCTAssertEqual(7, removed);
+  // GC up through 15, which is 15%.
+  // Expect to have GC'd 7 targets (even values of 1-15).
+  NSUInteger removed = persistence.run("do GC", [&]() -> NSUInteger {
+    return [gc removeQueriesUpThroughSequenceNumber:15 liveQueries:liveQueries];
   });
+  XCTAssertEqual(7, removed);
   [persistence shutdown];
 }
-
+/*
 - (void)testRemoveOrphanedDocuments {
   if ([self isTestBaseClass]) return;
 
