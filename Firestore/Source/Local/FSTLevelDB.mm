@@ -19,6 +19,7 @@
 #include <memory>
 
 #import "FIRFirestoreErrors.h"
+#import "Firestore/Source/Core/FSTListenSequence.h"
 #import "Firestore/Source/Local/FSTLevelDBKey.h"
 #import "Firestore/Source/Local/FSTLevelDBMigrations.h"
 #import "Firestore/Source/Local/FSTLevelDBMutationQueue.h"
@@ -61,12 +62,19 @@ using leveldb::Status;
 using leveldb::WriteOptions;
 
 @interface FSTLevelDBLRUDelegate : NSObject<FSTReferenceDelegate, FSTLRUDelegate>
+
+- (void)startTransaction;
+
+- (void)commit;
+
 @end
 
 @implementation FSTLevelDBLRUDelegate {
   FSTLRUGarbageCollector *_gc;
   FSTLevelDB *_db;
   FSTReferenceSet *_additionalReferences;
+  FSTListenSequenceNumber _currentSequenceNumber;
+  FSTListenSequence *_listenSequence;
 }
 
 - (instancetype)initWithPersistence:(FSTLevelDB *)persistence {
@@ -76,8 +84,25 @@ using leveldb::WriteOptions;
                                                   thresholds:FSTLRUThreshold::Defaults()
                                                          now:0];
     _db = persistence;
+    _currentSequenceNumber = kFSTListenSequenceNumberInvalid;
+    FSTListenSequenceNumber highestSequenceNumber = _db.queryCache.highestListenSequenceNumber;
+    _listenSequence = [[FSTListenSequence alloc] initStartingAfter:highestSequenceNumber];
   }
   return self;
+}
+
+- (void)startTransaction {
+  FSTAssert(_currentSequenceNumber == kFSTListenSequenceNumberInvalid, @"Previous sequence number is still in effect");
+  _currentSequenceNumber = [_listenSequence next];
+}
+
+- (void)commit {
+  _currentSequenceNumber = kFSTListenSequenceNumberInvalid;
+}
+
+- (FSTListenSequenceNumber)sequenceNumber {
+  FSTAssert(_currentSequenceNumber != kFSTListenSequenceNumberInvalid, @"Asking for a sequence number outside of a transaction");
+  return _currentSequenceNumber;
 }
 
 - (void)addInMemoryPins:(FSTReferenceSet *)set {
@@ -86,22 +111,21 @@ using leveldb::WriteOptions;
   _additionalReferences = set;
 }
 
-- (void)removeTarget:(FSTQueryData *)queryData
-      sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+- (void)removeTarget:(FSTQueryData *)queryData {
   FSTQueryData *updated = [queryData queryDataByReplacingSnapshotVersion:queryData.snapshotVersion
                                                              resumeToken:queryData.resumeToken
-                                                          sequenceNumber:sequenceNumber];
+                                                          sequenceNumber:[self sequenceNumber]];
   [_db.queryCache updateQueryData:updated];
 }
 
 - (void)addReference:(FSTDocumentKey *)key
               target:(__unused FSTTargetID)targetID {
-  [self writeSentinelForKey:key sequenceNumber:sequenceNumber];
+  [self writeSentinelForKey:key];
 }
 
 - (void)removeReference:(FSTDocumentKey *)key
                  target:(__unused FSTTargetID)targetID {
-  [self writeSentinelForKey:key sequenceNumber:sequenceNumber];
+  [self writeSentinelForKey:key];
 }
 
 
@@ -169,20 +193,19 @@ using leveldb::WriteOptions;
   return _gc;
 }
 
-- (void)writeSentinelForKey:(FSTDocumentKey *)key sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+- (void)writeSentinelForKey:(FSTDocumentKey *)key {
   std::string encodedSequenceNumber;
-  OrderedCode::WriteSignedNumIncreasing(&encodedSequenceNumber, sequenceNumber);
+  OrderedCode::WriteSignedNumIncreasing(&encodedSequenceNumber, [self sequenceNumber]);
   std::string sentinelKey = [FSTLevelDBDocumentTargetKey sentinelKeyWithDocumentKey:key];
   _db.currentTransaction->Put(sentinelKey, encodedSequenceNumber);
 }
 
-- (void)removeMutationReference:(FSTDocumentKey *)key
-                 sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
-  [self writeSentinelForKey:key sequenceNumber:sequenceNumber];
+- (void)removeMutationReference:(FSTDocumentKey *)key {
+  [self writeSentinelForKey:key];
 }
 
 - (void)limboDocumentUpdated:(FSTDocumentKey *)key {
-  [self writeSentinelForKey:key sequenceNumber:sequenceNumber];
+  [self writeSentinelForKey:key];
 }
 
 
@@ -405,10 +428,12 @@ using leveldb::WriteOptions;
 - (void)startTransaction:(absl::string_view)label {
   FSTAssert(_transaction == nullptr, @"Starting a transaction while one is already outstanding");
   _transaction = absl::make_unique<LevelDbTransaction>(_ptr.get(), label);
+  [_referenceDelegate startTransaction];
 }
 
 - (void)commitTransaction {
   FSTAssert(_transaction != nullptr, @"Committing a transaction before one is started");
+  [_referenceDelegate commit];
   _transaction->Commit();
   _transaction.reset();
 }

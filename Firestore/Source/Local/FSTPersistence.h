@@ -155,6 +155,8 @@ struct FSTTransactionRunner;
  */
 - (void)limboDocumentUpdated:(FSTDocumentKey *)key;
 
+- (FSTListenSequenceNumber)sequenceNumber;
+
 @end
 
 struct FSTTransactionRunner {

@@ -19,6 +19,7 @@
 #include <unordered_map>
 
 #include "absl/memory/memory.h"
+#import "Firestore/Source/Core/FSTListenSequence.h"
 #import "Firestore/Source/Local/FSTLRUGarbageCollector.h"
 #import "Firestore/Source/Local/FSTMemoryMutationQueue.h"
 #import "Firestore/Source/Local/FSTMemoryQueryCache.h"
@@ -222,6 +223,8 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   NSMutableDictionary<FSTDocumentKey *, NSNumber *> *_sequenceNumbers;
   FSTReferenceSet *_additionalReferences;
   FSTLRUGarbageCollector *_gc;
+  FSTListenSequenceNumber _currentSequenceNumber;
+  FSTListenSequence *_listenSequence;
 }
 
 - (instancetype)initWithPersistence:(FSTMemoryPersistence *)persistence {
@@ -232,6 +235,9 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
                                                     delegate:self
                                                   thresholds:FSTLRUThreshold::Defaults()
                                                          now:0];
+    _currentSequenceNumber = kFSTListenSequenceNumberInvalid;
+    FSTListenSequenceNumber highestSequenceNumber = _persistence.queryCache.highestListenSequenceNumber;
+    _listenSequence = [[FSTListenSequence alloc] initStartingAfter:highestSequenceNumber];
   }
   return self;
 }
@@ -246,26 +252,32 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   _additionalReferences = set;
 }
 
-- (void)removeTarget:(FSTQueryData *)queryData sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+- (void)removeTarget:(FSTQueryData *)queryData {
   FSTQueryData *updated = [queryData queryDataByReplacingSnapshotVersion:queryData.snapshotVersion
                                                              resumeToken:queryData.resumeToken
-                                                          sequenceNumber:sequenceNumber];
+                                                          sequenceNumber:[self sequenceNumber]];
   [_persistence.queryCache updateQueryData:updated];
 }
 
-- (void)documentUpdated:(FSTDocumentKey *)key sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
-  _sequenceNumbers[key] = @(sequenceNumber);
+- (void)limboDocumentUpdated:(FSTDocumentKey *)key {
+  _sequenceNumbers[key] = @([self sequenceNumber]);
   // TODO(gsoltis): probably need to implement this
   // Need to bump sequence number?
 }
 
 
-- (void)startTransaction:(absl::string_view)label {
-  // wat do?
+- (void)startTransaction:(absl::string_view __unused)label {
+  FSTAssert(_currentSequenceNumber == kFSTListenSequenceNumberInvalid, @"Previous sequence number is still in effect");
+  _currentSequenceNumber = [_listenSequence next];
 }
 
 - (void)commitTransaction {
-  // TODO(gsoltis): maybe check if we need to schedule a GC?
+  _currentSequenceNumber = kFSTListenSequenceNumberInvalid;
+}
+
+- (FSTListenSequenceNumber)sequenceNumber {
+  FSTAssert(_currentSequenceNumber != kFSTListenSequenceNumberInvalid, @"Asking for a sequence number outside of a transaction");
+  return _currentSequenceNumber;
 }
 
 - (void)enumerateTargetsUsingBlock:(void (^)(FSTQueryData *queryData, BOOL *stop))block {
@@ -291,11 +303,11 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
                                                                              throughSequenceNumber:upperBound];
 }
 
-- (void)addReference:(FSTDocumentKey *)key target:(FSTTargetID)targetID sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
-  _sequenceNumbers[key] = @(sequenceNumber);
+- (void)addReference:(FSTDocumentKey *)key target:(FSTTargetID)targetID {
+  _sequenceNumbers[key] = @([self sequenceNumber]);
 }
 
-- (void)removeReference:(FSTDocumentKey *)key target:(FSTTargetID)targetID sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+- (void)removeReference:(FSTDocumentKey *)key target:(FSTTargetID)targetID {
   // No-op. LRU doesn't care when references are removed.
 }
 
@@ -310,9 +322,8 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   return NO;
 }
 
-- (void)removeMutationReference:(FSTDocumentKey *)key
-                 sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
-  _sequenceNumbers[key] = @(sequenceNumber);
+- (void)removeMutationReference:(FSTDocumentKey *)key {
+  _sequenceNumbers[key] = @([self sequenceNumber]);
 }
 
 - (BOOL)isPinnedAtSequenceNumber:(FSTListenSequenceNumber)upperBound document:(FSTDocumentKey *)key {
@@ -354,8 +365,7 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   _additionalReferences = set;
 }
 
-- (void)removeTarget:(FSTQueryData *)queryData
-      sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+- (void)removeTarget:(FSTQueryData *)queryData {
   for (const DocumentKey &docKey : [_persistence.queryCache matchingKeysForTargetID:queryData.targetID]) {
     FSTDocumentKey *key = docKey;
     self->_orphaned->insert(key);
@@ -374,8 +384,7 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   _orphaned->insert(key);
 }
 
-- (void)removeMutationReference:(FSTDocumentKey *)key
-                 sequenceNumber:(__unused FSTListenSequenceNumber)sequenceNumber{
+- (void)removeMutationReference:(FSTDocumentKey *)key {
   _orphaned->insert(key);
 }
 
@@ -392,7 +401,7 @@ using MutationQueues = std::unordered_map<User, FSTMemoryMutationQueue *, HashUs
   return NO;
 }
 
-- (void)documentUpdated:(FSTDocumentKey *)key sequenceNumber:(FSTListenSequenceNumber)sequenceNumber {
+- (void)limboDocumentUpdated:(FSTDocumentKey *)key {
   if ([self isReferenced:key]) {
     _orphaned->erase(key);
   } else {

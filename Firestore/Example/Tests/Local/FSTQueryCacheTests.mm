@@ -176,8 +176,8 @@ NS_ASSUME_NONNULL_BEGIN
 
     DocumentKey key1 = testutil::Key("rooms/foo");
     DocumentKey key2 = testutil::Key("rooms/bar");
-    [self addMatchingKey:key1 forTargetID:rooms.targetID atSequenceNumber:1];
-    [self addMatchingKey:key2 forTargetID:rooms.targetID atSequenceNumber:1];
+    [self addMatchingKey:key1 forTargetID:rooms.targetID];
+    [self addMatchingKey:key2 forTargetID:rooms.targetID];
 
     XCTAssertTrue([self.queryCache containsKey:key1]);
     XCTAssertTrue([self.queryCache containsKey:key2]);
@@ -218,9 +218,9 @@ NS_ASSUME_NONNULL_BEGIN
     DocumentKey key2 = testutil::Key("foo/baz");
     DocumentKey key3 = testutil::Key("foo/blah");
 
-    [self addMatchingKey:key1 forTargetID:1 atSequenceNumber:10];
-    [self addMatchingKey:key2 forTargetID:1 atSequenceNumber:10];
-    [self addMatchingKey:key3 forTargetID:2 atSequenceNumber:11];
+    [self addMatchingKey:key1 forTargetID:1];
+    [self addMatchingKey:key2 forTargetID:1];
+    [self addMatchingKey:key3 forTargetID:2];
     XCTAssertTrue([self.queryCache containsKey:key1]);
     XCTAssertTrue([self.queryCache containsKey:key2]);
     XCTAssertTrue([self.queryCache containsKey:key3]);
