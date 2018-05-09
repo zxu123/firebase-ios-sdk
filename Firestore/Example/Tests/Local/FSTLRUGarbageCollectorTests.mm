@@ -316,75 +316,79 @@ NS_ASSUME_NONNULL_BEGIN
   XCTAssertEqual(7, removed);
   [persistence shutdown];
 }
-/*
+
 - (void)testRemoveOrphanedDocuments {
   if ([self isTestBaseClass]) return;
 
   id<FSTPersistence> persistence = [self newPersistence];
-  persistence.run("testRemoveOrphanedDocuments", [&]() {
-    id<FSTQueryCache> queryCache = [persistence queryCache];
+  id<FSTQueryCache> queryCache = [persistence queryCache];
+  id<FSTRemoteDocumentCache> documentCache = [persistence remoteDocumentCache];
+  User user("user");
+  FSTLRUGarbageCollector *gc = [self gcForPersistence:persistence];
+  id<FSTMutationQueue> mutationQueue = [persistence mutationQueueForUser:user];
+  persistence.run("start", [&]() {
     [queryCache start];
-    id<FSTRemoteDocumentCache> documentCache = [persistence remoteDocumentCache];
-    User user("user");
-    id<FSTMutationQueue> mutationQueue = [persistence mutationQueueForUser:user];
-    FSTLRUGarbageCollector *gc = [self gcForPersistence:persistence];
     [mutationQueue start];
+  });
 
-    // Add docs to mutation queue, as well as keep some queries. verify that correct documents are
-    // removed.
-    NSMutableSet<FSTDocumentKey *> *toBeRetained = [NSMutableSet set];
+  // Add docs to mutation queue, as well as keep some queries. verify that correct documents are
+  // removed.
+  NSMutableSet<FSTDocumentKey *> *toBeRetained = [NSMutableSet set];
 
-    NSMutableArray *mutations = [NSMutableArray arrayWithCapacity:2];
-    // Add two documents to first target, and register a mutation on the second one
-    {
-      FSTQueryData *queryData = [self nextTestQuery];
-      [queryCache addQueryData:queryData];
-      DocumentKeySet keySet{};
-      FSTDocument *doc1 = [self nextTestDocument];
-      [documentCache addEntry:doc1];
-      keySet = keySet.insert(doc1.key);
-      [toBeRetained addObject:doc1.key];
-      FSTDocument *doc2 = [self nextTestDocument];
-      [documentCache addEntry:doc2];
-      keySet = keySet.insert(doc2.key);
-      [toBeRetained addObject:doc2.key];
-      [queryCache addMatchingKeys:keySet forTargetID:queryData.targetID];
+  NSMutableArray *mutations = [NSMutableArray arrayWithCapacity:2];
+  // Add two documents to first target, and register a mutation on the second one
+  persistence.run("add docs and mutation", [&]() {
+    FSTQueryData *queryData = [self nextTestQuery:persistence];
+    [queryCache addQueryData:queryData];
+    DocumentKeySet keySet{};
+    FSTDocument *doc1 = [self nextTestDocument];
+    [documentCache addEntry:doc1];
+    keySet = keySet.insert(doc1.key);
+    [toBeRetained addObject:doc1.key];
+    FSTDocument *doc2 = [self nextTestDocument];
+    [documentCache addEntry:doc2];
+    keySet = keySet.insert(doc2.key);
+    [toBeRetained addObject:doc2.key];
+    [queryCache addMatchingKeys:keySet forTargetID:queryData.targetID];
 
-      FSTObjectValue *newValue = [[FSTObjectValue alloc]
-          initWithDictionary:@{@"foo" : [FSTStringValue stringValue:@"bar"]}];
-      [mutations addObject:[[FSTSetMutation alloc] initWithKey:doc2.key
-                                                         value:newValue
-                                                  precondition:Precondition::None()]];
-    }
+    FSTObjectValue *newValue = [[FSTObjectValue alloc]
+        initWithDictionary:@{@"foo" : [FSTStringValue stringValue:@"bar"]}];
+    [mutations addObject:[[FSTSetMutation alloc] initWithKey:doc2.key
+                                                       value:newValue
+                                                precondition:Precondition::None()]];
+  });
 
-    // Add one document to the second target
-    {
-      FSTQueryData *queryData = [self nextTestQuery];
-      [queryCache addQueryData:queryData];
-      DocumentKeySet keySet{};
-      FSTDocument *doc1 = [self nextTestDocument];
-      [documentCache addEntry:doc1];
-      keySet = keySet.insert(doc1.key);
-      [toBeRetained addObject:doc1.key];
-      [queryCache addMatchingKeys:keySet forTargetID:queryData.targetID];
-    }
+  // Add one document to the second target
+  persistence.run("add document to second target", [&]() {
+    FSTQueryData *queryData = [self nextTestQuery:persistence];
+    [queryCache addQueryData:queryData];
+    DocumentKeySet keySet{};
+    FSTDocument *doc1 = [self nextTestDocument];
+    [documentCache addEntry:doc1];
+    keySet = keySet.insert(doc1.key);
+    [toBeRetained addObject:doc1.key];
+    [queryCache addMatchingKeys:keySet forTargetID:queryData.targetID];
+  });
 
-    {
-      FSTDocument *doc1 = [self nextTestDocument];
-      [mutations addObject:[[FSTSetMutation alloc] initWithKey:doc1.key
-                                                         value:doc1.data
-                                                  precondition:Precondition::None()]];
-      [documentCache addEntry:doc1];
-      [toBeRetained addObject:doc1.key];
-    }
+  persistence.run("Add new document", [&]() {
+    FSTDocument *doc1 = [self nextTestDocument];
+    [mutations addObject:[[FSTSetMutation alloc] initWithKey:doc1.key
+                                                       value:doc1.data
+                                                precondition:Precondition::None()]];
+    [documentCache addEntry:doc1];
+    [toBeRetained addObject:doc1.key];
+  });
 
+  persistence.run("Add mutations", [&]() {
     FIRTimestamp *writeTime = [FIRTimestamp timestamp];
     [mutationQueue addMutationBatchWithWriteTime:writeTime mutations:mutations];
+  });
 
-    // Now add the docs we expect to get resolved.
-    NSUInteger expectedRemoveCount = 5;
-    NSMutableSet<FSTDocumentKey *> *toBeRemoved =
-        [NSMutableSet setWithCapacity:expectedRemoveCount];
+  // Now add the docs we expect to get resolved.
+  NSUInteger expectedRemoveCount = 5;
+  NSMutableSet<FSTDocumentKey *> *toBeRemoved =
+          [NSMutableSet setWithCapacity:expectedRemoveCount];
+  persistence.run("Add documents", [&]() {
     DocumentKeySet removedSet{};
     for (int i = 0; i < expectedRemoveCount; i++) {
       FSTDocument *doc = [self nextTestDocument];
@@ -393,11 +397,16 @@ NS_ASSUME_NONNULL_BEGIN
       removedSet = removedSet.insert(doc.key);
       [persistence.referenceDelegate removeMutationReference:doc.key];
     }
-    //[queryCache addPotentiallyOrphanedDocuments:removedSet atSequenceNumber:1000];
-    NSUInteger removed = [gc removeOrphanedDocuments:documentCache
-                               throughSequenceNumber:1000
-                                       mutationQueue:mutationQueue];
+  });
 
+  //[queryCache addPotentiallyOrphanedDocuments:removedSet atSequenceNumber:1000];
+  NSUInteger removed = persistence.run("GC orpahened", [&]() -> NSUInteger {
+    return [gc removeOrphanedDocuments:documentCache
+                 throughSequenceNumber:1000
+                         mutationQueue:mutationQueue];
+  });
+
+  persistence.run("verification", [&]() {
     XCTAssertEqual(expectedRemoveCount, removed);
     for (FSTDocumentKey *key in toBeRemoved) {
       XCTAssertNil([documentCache entryForKey:key]);
@@ -407,9 +416,10 @@ NS_ASSUME_NONNULL_BEGIN
       XCTAssertNotNil([documentCache entryForKey:key], @"Missing document %@", key);
     }
   });
+
   [persistence shutdown];
 }
-
+/*
 // TODO(gsoltis): write a test that includes limbo documents
 
 - (void)testRemoveTargetsThenGC {
