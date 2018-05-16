@@ -109,6 +109,9 @@ enum FirestoreErrorCode {
   Unauthenticated = 16
 };
 
+// TODO(zxu): decide whether we actually want an Error class or just use enum.
+using Error = FirestoreErrorCode;
+
 }  // namespace firestore
 }  // namespace firebase
 
